@@ -4,6 +4,7 @@ import { Player } from './player.js';
 import { BotManager, BOT_TYPES } from './bots.js';
 import { Effects } from './effects.js';
 import { Sounds } from './sounds.js';
+import { UPGRADES, TIERS, createStats, rollOffer } from './upgrades.js';
 
 const MAG_SIZE = 10;
 const FIRE_INTERVAL = 0.14;
@@ -11,6 +12,7 @@ const RELOAD_TIME = 1.1;
 const BODY_DAMAGE = 34;
 const HEAD_DAMAGE = 100;
 const BASE_FOV = 75;
+const LONGSHOT_DIST = 25;
 
 // wave composition: [grunts, rushers, snipers, tanks] or a boss wave
 function mix(g, r, s, t) {
@@ -106,6 +108,7 @@ const bossBar = el('boss-bar');
 const banner = el('banner');
 const popup = el('popup');
 const feed = el('feed');
+const buildStrip = el('build');
 const hitmarker = el('hitmarker');
 const vignette = el('vignette');
 const overlay = el('overlay');
@@ -113,11 +116,13 @@ const ovMsg = el('ov-msg');
 const ovSub = el('ov-sub');
 const ovTitle = overlay.querySelector('h1');
 const ovPrompt = overlay.querySelector('.prompt');
+const upgradeScreen = el('upgrade-screen');
+const upgradeCards = el('upgrade-cards');
 
 // --- game state ---
 let state = 'menu'; // menu | playing | paused | over
 let waveNum = 0;
-let waveState = 'idle'; // intermission | active
+let waveState = 'idle'; // intermission | active | upgrade
 let interTimer = 0;
 let score = 0;
 let kills = 0;
@@ -133,6 +138,50 @@ let vignetteAlpha = 0;
 let shake = 0;
 let stepAcc = 0;
 let heartbeatTimer = 0;
+
+// --- roguelike run state ---
+let stats = createStats();
+const owned = new Map(); // upgrade id -> stacks
+let secondWindUsed = false;
+let adrenTimer = 0;
+let invulnTimer = 0;
+
+const magSize = () => {
+  const m = MAG_SIZE + stats.magBonus;
+  return stats.magCap ? Math.min(stats.magCap, m) : m;
+};
+const berserkActive = () =>
+  stats.berserker && player.health < player.maxHealth * 0.3;
+const ownedUniqueIds = () =>
+  new Set(
+    [...owned.keys()].filter((id) => UPGRADES.find((u) => u.id === id)?.unique)
+  );
+
+function syncStats() {
+  const newMax = 100 + stats.maxHealthBonus;
+  if (newMax > player.maxHealth) player.health += newMax - player.maxHealth;
+  player.maxHealth = newMax;
+  player.health = Math.min(player.health, newMax);
+  player.jumpMult = stats.jumpMult;
+  player.canDoubleJump = stats.doubleJump;
+  player.regenDelay = stats.regenDelay;
+  player.regenRate = stats.regenRate;
+  ammo = Math.min(ammo, magSize());
+}
+
+function updateBuildStrip() {
+  buildStrip.innerHTML = '';
+  for (const [id, count] of owned) {
+    const upg = UPGRADES.find((u) => u.id === id);
+    if (!upg) continue;
+    const span = document.createElement('span');
+    span.className = 'build-item';
+    span.style.borderColor = TIERS[upg.tier].color;
+    span.style.color = TIERS[upg.tier].color;
+    span.textContent = count > 1 ? `${upg.name} ×${count}` : upg.name;
+    buildStrip.appendChild(span);
+  }
+}
 
 const BEST_KEY = 'minifps-best';
 function loadBest() {
@@ -185,19 +234,28 @@ function showOverlay(title, msg, sub, prompt) {
 }
 
 function startGame() {
+  stats = createStats();
+  owned.clear();
+  secondWindUsed = false;
+  adrenTimer = 0;
+  invulnTimer = 0;
+  player.maxHealth = 100;
   player.reset();
+  syncStats();
+  updateBuildStrip();
   bots.clearAll();
   score = 0;
   kills = 0;
   comboMult = 1;
   comboTimer = 0;
-  ammo = MAG_SIZE;
+  ammo = magSize();
   reloading = false;
   fireCooldown = 0;
   firing = false;
   vignetteAlpha = 0;
   shake = 0;
   feed.innerHTML = '';
+  upgradeScreen.classList.add('hidden');
   state = 'playing';
   startWave(1);
 }
@@ -212,6 +270,43 @@ function startWave(n) {
   else sounds.waveStart();
 }
 
+// --- upgrade offers ---
+function showUpgradeOffer() {
+  waveState = 'upgrade';
+  firing = false;
+  const offer = rollOffer(waveNum, ownedUniqueIds());
+  upgradeCards.innerHTML = '';
+  for (const upg of offer) {
+    const tier = TIERS[upg.tier];
+    const count = owned.get(upg.id) || 0;
+    const card = document.createElement('button');
+    card.className = 'upgrade-card';
+    card.style.borderColor = tier.color;
+    card.style.boxShadow = `0 0 24px ${tier.color}33, inset 0 0 14px ${tier.color}14`;
+    card.innerHTML =
+      `<div class="tier-label" style="color:${tier.color}">${tier.label}</div>` +
+      `<div class="upg-name">${upg.name}</div>` +
+      `<div class="upg-desc">${upg.desc}</div>` +
+      (count ? `<div class="upg-owned">owned ×${count}</div>` : '');
+    card.onclick = () => pickUpgrade(upg);
+    upgradeCards.appendChild(card);
+  }
+  upgradeScreen.classList.remove('hidden');
+  document.exitPointerLock();
+}
+
+function pickUpgrade(upg) {
+  upg.apply(stats);
+  owned.set(upg.id, (owned.get(upg.id) || 0) + 1);
+  syncStats();
+  updateBuildStrip();
+  addFeedLine(`${TIERS[upg.tier].label}: ${upg.name}`);
+  sounds.pickup();
+  upgradeScreen.classList.add('hidden');
+  canvas.requestPointerLock();
+  startWave(waveNum + 1);
+}
+
 function onWaveCleared() {
   const bonus = waveNum * 250;
   score += bonus;
@@ -221,7 +316,7 @@ function onWaveCleared() {
     endGame(true);
   } else {
     showPopup(`WAVE CLEARED +${bonus}`);
-    startWave(waveNum + 1);
+    showUpgradeOffer();
   }
 }
 
@@ -231,19 +326,25 @@ function endGame(won) {
   saveBest();
   const best = loadBest();
   document.exitPointerLock();
+  const buildSummary = [...owned.keys()].length
+    ? `build: ${[...owned.entries()].map(([id, n]) => {
+        const u = UPGRADES.find((x) => x.id === id);
+        return n > 1 ? `${u.name} ×${n}` : u.name;
+      }).join(' · ')}`
+    : '';
   if (won) {
     sounds.victory();
     showOverlay(
       'VICTORY',
       `ALL ${FINAL_WAVE} WAVES CLEARED · SCORE ${score.toLocaleString()}`,
-      `${kills} kills · best score ${Math.max(best.score, score).toLocaleString()}`,
+      `${kills} kills · best score ${Math.max(best.score, score).toLocaleString()}<br />${buildSummary}`,
       'CLICK TO PLAY AGAIN'
     );
   } else {
     showOverlay(
       'YOU DIED',
       `WAVE ${waveNum} · SCORE ${score.toLocaleString()}`,
-      `${kills} kills · best score ${Math.max(best.score, score).toLocaleString()}`,
+      `${kills} kills · best score ${Math.max(best.score, score).toLocaleString()}<br />${buildSummary}`,
       'CLICK TO RETRY'
     );
   }
@@ -262,7 +363,7 @@ overlay.addEventListener('click', () => {
 
 document.addEventListener('pointerlockchange', () => {
   const locked = document.pointerLockElement === canvas;
-  if (!locked && state === 'playing') {
+  if (!locked && state === 'playing' && waveState !== 'upgrade') {
     state = 'paused';
     firing = false;
     showOverlay(
@@ -291,7 +392,10 @@ document.addEventListener('mouseup', (e) => {
 
 document.addEventListener('keydown', (e) => {
   player.keys[e.code] = true;
-  if (e.code === 'Space') e.preventDefault();
+  if (e.code === 'Space') {
+    e.preventDefault();
+    if (!e.repeat) player.wantJump = true;
+  }
   if (e.code === 'KeyR' && state === 'playing') startReload();
 });
 document.addEventListener('keyup', (e) => {
@@ -317,7 +421,7 @@ function addKill(bot, part) {
     pts *= 2;
     tags.push('AIRBORNE');
   }
-  comboMult = comboTimer > 0 ? Math.min(5, comboMult + 1) : 1;
+  comboMult = comboTimer > 0 ? Math.min(stats.comboMax, comboMult + 1) : 1;
   comboTimer = 4;
   const total = Math.round((pts * comboMult) / 10) * 10;
   score += total;
@@ -335,12 +439,36 @@ const raycaster = new THREE.Raycaster();
 const _origin = new THREE.Vector3();
 const _dir = new THREE.Vector3();
 const _muzzle = new THREE.Vector3();
+const _botCenter = new THREE.Vector3();
 
 function startReload() {
-  if (reloading || ammo === MAG_SIZE) return;
+  if (reloading || ammo === magSize()) return;
   reloading = true;
-  reloadTimer = RELOAD_TIME;
+  reloadTimer = RELOAD_TIME / stats.reloadMult;
   sounds.reload();
+}
+
+function shotDamage(part, dist, bot) {
+  let dmg = part === 'head' ? HEAD_DAMAGE * stats.headshotMult : BODY_DAMAGE;
+  dmg *= stats.damageMult;
+  if (dist > LONGSHOT_DIST) dmg *= stats.longshotMult;
+  if (bot && bot.health < bot.maxHealth * 0.3) dmg *= stats.executionerMult;
+  if (berserkActive()) dmg *= 1.5;
+  return Math.round(dmg);
+}
+
+// central damage funnel so pierce/splash kills trigger the same effects
+function dealDamage(bot, dmg, part) {
+  const died = bots.damage(bot, dmg);
+  if (died) {
+    addKill(bot, part);
+    if (stats.killHeal) {
+      player.health = Math.min(player.maxHealth, player.health + stats.killHeal);
+    }
+    if (stats.killAmmo) ammo = Math.min(magSize(), ammo + stats.killAmmo);
+    if (stats.adrenaline) adrenTimer = 3;
+  }
+  return died;
 }
 
 function tryShoot() {
@@ -350,7 +478,7 @@ function tryShoot() {
     startReload();
     return;
   }
-  fireCooldown = FIRE_INTERVAL;
+  fireCooldown = FIRE_INTERVAL / stats.fireRateMult;
   ammo--;
   gunKick = 1;
   sounds.shoot();
@@ -363,18 +491,46 @@ function tryShoot() {
 
   const hits = raycaster.intersectObjects([...bots.getTargets(), ...world.solids], false);
   const end = _origin.clone().addScaledVector(_dir, 150);
-  if (hits.length) {
-    end.copy(hits[0].point);
-    const target = hits[0].object.userData;
-    if (target && target.bot) {
-      const dmg = target.part === 'head' ? HEAD_DAMAGE : BODY_DAMAGE;
-      const died = bots.damage(target.bot, dmg);
-      effects.spark(end, 0xff5555);
-      hitmarkerTimer = 0.12;
-      sounds.hit();
-      if (died) addKill(target.bot, target.part);
+  const struck = []; // {bot, part, point, dist} — one entry per bot
+  const seen = new Set();
+  for (const h of hits) {
+    const ud = h.object.userData;
+    if (ud && ud.bot) {
+      if (!seen.has(ud.bot)) {
+        seen.add(ud.bot);
+        struck.push({ bot: ud.bot, part: ud.part, point: h.point, dist: h.distance });
+      }
+      if (!stats.pierce) {
+        end.copy(h.point);
+        break;
+      }
     } else {
-      effects.spark(end, 0xccc9a8);
+      end.copy(h.point);
+      break;
+    }
+  }
+
+  if (struck.length) {
+    hitmarkerTimer = 0.12;
+    sounds.hit();
+    for (const s of struck) {
+      effects.spark(s.point, 0xff5555);
+      dealDamage(s.bot, shotDamage(s.part, s.dist, s.bot), s.part);
+    }
+  } else if (hits.length) {
+    effects.spark(end, 0xccc9a8);
+  }
+
+  // explosive rounds: splash at the impact point
+  if (stats.explosive) {
+    effects.explosion(end, 0xff8833, 0.6);
+    addShake(0.12);
+    const splash = Math.round(BODY_DAMAGE * 0.5 * stats.damageMult);
+    for (const b of bots.bots) {
+      if (!b.alive || seen.has(b)) continue;
+      _botCenter.copy(b.group.position);
+      _botCenter.y += 0.9 * b.cfg.scale;
+      if (_botCenter.distanceTo(end) < 3) dealDamage(b, splash, 'body');
     }
   }
 
@@ -386,18 +542,43 @@ function tryShoot() {
   if (ammo === 0) startReload();
 }
 
-// --- bot damage callback ---
+// --- bot damage callbacks ---
 bots.onBossEnraged = (bot) => {
   showBanner(`${bot.cfg.name} ENRAGED`, 'RUN.');
   addShake(1);
 };
 
 bots.onPlayerHit = (dmg, kind) => {
+  if (invulnTimer > 0) return;
+  if (kind === 'shock' && stats.shockImmune) {
+    addFeedLine('SLAM BLOCKED');
+    return;
+  }
+  const final = Math.max(1, Math.round(dmg * (1 - stats.damageReduction)));
   vignetteAlpha = 0.85;
-  addShake(kind === 'shock' ? 1.3 : kind === 'melee' ? 0.7 : 0.35 + dmg / 60);
+  addShake(kind === 'shock' ? 1.3 : kind === 'melee' ? 0.7 : 0.35 + final / 60);
   sounds.hurt();
-  const dead = player.takeDamage(dmg);
-  if (dead) endGame(false);
+  const dead = player.takeDamage(final);
+  if (dead) {
+    if (stats.secondWind && !secondWindUsed) {
+      secondWindUsed = true;
+      player.health = Math.round(player.maxHealth * 0.5);
+      invulnTimer = 1.5;
+      showBanner('SECOND WIND', 'DEATH REFUSED');
+      effects.explosion(player.position.clone(), 0xffd36b, 1.5);
+      sounds.bossRoar();
+      return;
+    }
+    endGame(false);
+  }
+};
+
+player.onAirJump = () => {
+  effects.burst(
+    new THREE.Vector3(player.position.x, player.position.y - 1.5, player.position.z),
+    0x9fd8ff, 10, 3, 0.3
+  );
+  sounds.waveStart();
 };
 
 // --- gun animation ---
@@ -417,18 +598,20 @@ function updateGun(dt) {
 function updateHUD(dt) {
   hudHealth.style.width = `${(player.health / player.maxHealth) * 100}%`;
   hudHealth.style.background =
-    player.health > 40
+    player.health > player.maxHealth * 0.4
       ? 'linear-gradient(90deg, #37d67a, #7ce7a5)'
       : 'linear-gradient(90deg, #d63737, #e77c7c)';
   hudAmmo.textContent = reloading ? '···' : `${ammo}`;
   hudScore.textContent = score.toLocaleString();
   hudMult.textContent = `×${comboMult}`;
-  hudMult.className = comboMult > 1 ? `hot hot-${comboMult}` : '';
+  hudMult.className = comboMult > 1 ? `hot hot-${Math.min(comboMult, 5)}` : '';
   hudComboBar.style.width = `${(comboTimer / 4) * 100}%`;
 
   hudWaveNum.textContent = `WAVE ${waveNum}`;
   if (waveState === 'intermission') {
     hudWaveInfo.textContent = `INCOMING ${Math.ceil(interTimer)}`;
+  } else if (waveState === 'upgrade') {
+    hudWaveInfo.textContent = 'CHOOSE UPGRADE';
   } else {
     hudWaveInfo.textContent = `ENEMIES ${bots.aliveCount()}`;
   }
@@ -446,7 +629,7 @@ function updateHUD(dt) {
 
   vignetteAlpha = Math.max(0, vignetteAlpha - dt * 1.6);
   let v = vignetteAlpha;
-  if (state === 'playing' && player.health < 35) {
+  if (state === 'playing' && player.health < player.maxHealth * 0.35) {
     v = Math.max(v, 0.3 + Math.sin(performance.now() / 160) * 0.12);
   }
   vignette.style.opacity = `${v}`;
@@ -455,15 +638,28 @@ function updateHUD(dt) {
 // debug/testing handle
 window.__game = {
   player, bots, camera,
+  get stats_() { return stats; },
+  owned,
   stats: () => ({
     state, waveState, wave: waveNum, score, mult: comboMult, kills,
-    ammo, health: player.health, enemies: bots.aliveCount(),
+    ammo, mag: magSize(), health: player.health, maxHealth: player.maxHealth,
+    enemies: bots.aliveCount(),
   }),
   debug: {
     winWave() {
       bots.spawnQueue = [];
       for (const b of bots.bots) if (b.alive) bots.destroy(b);
     },
+    give(id) {
+      const upg = UPGRADES.find((u) => u.id === id);
+      if (!upg) return false;
+      upg.apply(stats);
+      owned.set(id, (owned.get(id) || 0) + 1);
+      syncStats();
+      updateBuildStrip();
+      return true;
+    },
+    roll: (w) => rollOffer(w ?? waveNum, ownedUniqueIds()).map((u) => ({ id: u.id, tier: u.tier })),
   },
 };
 
@@ -473,6 +669,13 @@ renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05);
 
   if (state === 'playing') {
+    adrenTimer = Math.max(0, adrenTimer - dt);
+    invulnTimer = Math.max(0, invulnTimer - dt);
+    player.dynamicSpeedMult =
+      stats.speedMult *
+      (adrenTimer > 0 ? 1 + 0.25 * stats.adrenaline : 1) *
+      (berserkActive() ? 1.25 : 1);
+
     player.update(dt, world.obstacleBoxes);
 
     if (waveState === 'intermission') {
@@ -493,10 +696,10 @@ renderer.setAnimationLoop(() => {
       reloadTimer -= dt;
       if (reloadTimer <= 0) {
         reloading = false;
-        ammo = MAG_SIZE;
+        ammo = magSize();
       }
     }
-    if (firing) tryShoot();
+    if (firing && waveState !== 'upgrade') tryShoot();
     updateGun(dt);
 
     // footsteps
@@ -509,7 +712,7 @@ renderer.setAnimationLoop(() => {
     }
 
     // low-health heartbeat
-    if (player.health < 35 && player.health > 0) {
+    if (player.health < player.maxHealth * 0.35 && player.health > 0) {
       heartbeatTimer -= dt;
       if (heartbeatTimer <= 0) {
         heartbeatTimer = 0.95;

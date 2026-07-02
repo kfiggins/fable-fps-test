@@ -133,6 +133,11 @@ export class Sounds {
     this.sweep('sine', 220, 660, 0.25, 0.25);
   }
 
+  pickup() {
+    this.sweep('sine', 620, 1240, 0.16, 0.35);
+    this.sweep('sine', 930, 1560, 0.14, 0.25, 0.08);
+  }
+
   victory() {
     this.sweep('sine', 520, 520, 0.14, 0.4);
     this.sweep('sine', 660, 660, 0.14, 0.4, 0.15);

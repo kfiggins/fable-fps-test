@@ -22,6 +22,17 @@ export class Player {
     this.health = this.maxHealth;
     this.onGround = true;
     this.timeSinceHit = 999;
+
+    // modded by upgrades (main syncs these from the run's stats)
+    this.dynamicSpeedMult = 1;
+    this.jumpMult = 1;
+    this.regenRate = 8;
+    this.regenDelay = 5;
+    this.canDoubleJump = false;
+    this.airJumpUsed = false;
+    this.wantJump = false; // edge-triggered midair jump request
+    this.onAirJump = null; // callback for effects/sound
+
     this.reset();
   }
 
@@ -32,6 +43,8 @@ export class Player {
     this.health = this.maxHealth;
     this.onGround = true;
     this.timeSinceHit = 999;
+    this.airJumpUsed = false;
+    this.wantJump = false;
   }
 
   get position() {
@@ -56,6 +69,11 @@ export class Player {
     return Math.hypot(this.velocity.x, this.velocity.z);
   }
 
+  jumpVelocity() {
+    // jump height scales with v², so +10% height = ×√1.1 velocity
+    return JUMP_SPEED * Math.sqrt(this.jumpMult);
+  }
+
   update(dt, obstacleBoxes) {
     const k = this.keys;
     const yaw = this.camera.rotation.y;
@@ -69,7 +87,10 @@ export class Player {
     );
     if (_wish.lengthSq() > 1) _wish.normalize();
 
-    const speed = WALK_SPEED * (k['ShiftLeft'] || k['ShiftRight'] ? SPRINT_MULT : 1);
+    const speed =
+      WALK_SPEED *
+      (k['ShiftLeft'] || k['ShiftRight'] ? SPRINT_MULT : 1) *
+      this.dynamicSpeedMult;
     const blend = Math.min(1, dt * 12);
     this.velocity.x += (_wish.x * speed - this.velocity.x) * blend;
     this.velocity.z += (_wish.z * speed - this.velocity.z) * blend;
@@ -84,8 +105,16 @@ export class Player {
 
     // vertical move
     if (k['Space'] && this.onGround) {
-      this.velocity.y = JUMP_SPEED;
+      this.velocity.y = this.jumpVelocity();
       this.onGround = false;
+    }
+    if (this.wantJump) {
+      this.wantJump = false;
+      if (!this.onGround && this.canDoubleJump && !this.airJumpUsed) {
+        this.velocity.y = this.jumpVelocity() * 0.95;
+        this.airJumpUsed = true;
+        if (this.onAirJump) this.onAirJump();
+      }
     }
     this.velocity.y -= GRAVITY * dt;
     pos.y += this.velocity.y * dt;
@@ -104,11 +133,16 @@ export class Player {
     } else {
       this.onGround = false;
     }
+    if (this.onGround) this.airJumpUsed = false;
 
-    // slow health regen after 5s without taking a hit
+    // health regen after regenDelay seconds without taking a hit
     this.timeSinceHit += dt;
-    if (this.timeSinceHit > 5 && this.health > 0 && this.health < this.maxHealth) {
-      this.health = Math.min(this.maxHealth, this.health + 8 * dt);
+    if (
+      this.timeSinceHit > this.regenDelay &&
+      this.health > 0 &&
+      this.health < this.maxHealth
+    ) {
+      this.health = Math.min(this.maxHealth, this.health + this.regenRate * dt);
     }
   }
 }
