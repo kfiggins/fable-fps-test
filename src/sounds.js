@@ -61,6 +61,16 @@ export class Sounds {
     this.noise(0.05, 0.15);
   }
 
+  cannon() {
+    this.sweep('square', 120, 35, 0.25, 0.4);
+    this.noise(0.15, 0.3);
+  }
+
+  sniperShot() {
+    this.sweep('sawtooth', 900, 100, 0.18, 0.3);
+    this.noise(0.08, 0.2);
+  }
+
   hit() {
     this.sweep('sine', 1300, 900, 0.06, 0.35);
   }
@@ -74,6 +84,16 @@ export class Sounds {
     this.sweep('sawtooth', 160, 70, 0.22, 0.45);
   }
 
+  melee() {
+    this.noise(0.12, 0.5);
+    this.sweep('sawtooth', 110, 45, 0.18, 0.5);
+  }
+
+  shockwave() {
+    this.sweep('sawtooth', 85, 25, 0.5, 0.6);
+    this.noise(0.3, 0.4);
+  }
+
   reload() {
     this.sweep('square', 700, 500, 0.05, 0.2);
     this.sweep('square', 900, 1100, 0.05, 0.2, 0.25);
@@ -81,5 +101,42 @@ export class Sounds {
 
   empty() {
     this.sweep('square', 500, 400, 0.04, 0.15);
+  }
+
+  footstep() {
+    this.noise(0.04, 0.06);
+  }
+
+  heartbeat() {
+    this.sweep('sine', 62, 45, 0.1, 0.5);
+    this.sweep('sine', 58, 42, 0.09, 0.4, 0.16);
+  }
+
+  waveStart() {
+    this.sweep('sine', 380, 620, 0.16, 0.35);
+    this.sweep('sine', 500, 830, 0.2, 0.3, 0.14);
+  }
+
+  waveClear() {
+    this.sweep('sine', 520, 780, 0.12, 0.35);
+    this.sweep('sine', 660, 990, 0.12, 0.35, 0.1);
+    this.sweep('sine', 780, 1240, 0.2, 0.35, 0.2);
+  }
+
+  bossRoar() {
+    this.sweep('sawtooth', 70, 28, 0.9, 0.55);
+    this.sweep('sawtooth', 95, 40, 0.7, 0.35, 0.1);
+    this.noise(0.4, 0.25, 0.1);
+  }
+
+  summon() {
+    this.sweep('sine', 220, 660, 0.25, 0.25);
+  }
+
+  victory() {
+    this.sweep('sine', 520, 520, 0.14, 0.4);
+    this.sweep('sine', 660, 660, 0.14, 0.4, 0.15);
+    this.sweep('sine', 780, 780, 0.14, 0.4, 0.3);
+    this.sweep('sine', 1040, 1040, 0.4, 0.4, 0.45);
   }
 }

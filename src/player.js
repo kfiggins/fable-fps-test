@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { collideXZ, clampToArena } from './world.js';
+import { collideXZ, groundHeight, clampToArena } from './world.js';
 
 export const EYE_HEIGHT = 1.7;
 const RADIUS = 0.45;
@@ -7,6 +7,7 @@ const WALK_SPEED = 7;
 const SPRINT_MULT = 1.5;
 const GRAVITY = 26;
 const JUMP_SPEED = 9;
+const STEP_HEIGHT = 0.55; // tall enough to walk up 0.5m stair risers
 const LOOK_SENSITIVITY = 0.0021;
 
 const _wish = new THREE.Vector3();
@@ -73,25 +74,36 @@ export class Player {
     this.velocity.x += (_wish.x * speed - this.velocity.x) * blend;
     this.velocity.z += (_wish.z * speed - this.velocity.z) * blend;
 
+    const pos = this.camera.position;
+
+    // horizontal move + collision (boxes within step height don't block)
+    pos.x += this.velocity.x * dt;
+    pos.z += this.velocity.z * dt;
+    clampToArena(pos, RADIUS);
+    collideXZ(pos, RADIUS, pos.y - EYE_HEIGHT, pos.y + 0.2, obstacleBoxes, STEP_HEIGHT);
+
+    // vertical move
     if (k['Space'] && this.onGround) {
       this.velocity.y = JUMP_SPEED;
       this.onGround = false;
     }
     this.velocity.y -= GRAVITY * dt;
-
-    const pos = this.camera.position;
-    pos.x += this.velocity.x * dt;
-    pos.z += this.velocity.z * dt;
     pos.y += this.velocity.y * dt;
 
-    if (pos.y < EYE_HEIGHT) {
-      pos.y = EYE_HEIGHT;
+    const feet = pos.y - EYE_HEIGHT;
+    const support = groundHeight(pos, RADIUS * 0.6, feet, obstacleBoxes, STEP_HEIGHT);
+    if (feet < support - 0.001 && this.velocity.y <= 0.01) {
+      // stepped into higher ground (stairs) — climb up smoothly
+      pos.y = Math.min(support + EYE_HEIGHT, pos.y + 14 * dt);
       this.velocity.y = 0;
       this.onGround = true;
+    } else if (this.velocity.y <= 0 && feet <= support + 0.05) {
+      pos.y = support + EYE_HEIGHT;
+      this.velocity.y = 0;
+      this.onGround = true;
+    } else {
+      this.onGround = false;
     }
-
-    clampToArena(pos, RADIUS);
-    collideXZ(pos, RADIUS, pos.y - EYE_HEIGHT, pos.y + 0.2, obstacleBoxes);
 
     // slow health regen after 5s without taking a hit
     this.timeSinceHit += dt;

@@ -45,6 +45,7 @@
       background: rgba(10, 14, 20, .55); border: 1px solid rgba(255,255,255,.12);
       border-radius: 8px; color: #e8ecf1; backdrop-filter: blur(4px);
     }
+
     #health-panel { left: 24px; bottom: 24px; width: 220px; }
     #health-label { font-size: 11px; letter-spacing: 2px; color: #9fb0c3; margin-bottom: 6px; }
     #health-bar-bg { height: 12px; background: rgba(255,255,255,.1); border-radius: 6px; overflow: hidden; }
@@ -54,9 +55,73 @@
     #ammo { font-size: 30px; font-weight: bold; }
     #ammo-label { font-size: 11px; letter-spacing: 2px; color: #9fb0c3; }
 
-    #score-panel { top: 20px; left: 50%; transform: translateX(-50%); text-align: center; }
-    #kills { font-size: 24px; font-weight: bold; color: #ffd36b; }
-    #kills-label { font-size: 10px; letter-spacing: 2px; color: #9fb0c3; }
+    #wave-panel { top: 20px; left: 24px; }
+    #wave-num { font-size: 20px; font-weight: bold; color: #ffd36b; letter-spacing: 2px; }
+    #wave-info { font-size: 11px; letter-spacing: 2px; color: #9fb0c3; margin-top: 2px; }
+
+    #score-panel { top: 20px; right: 24px; text-align: right; min-width: 170px; }
+    #score { font-size: 24px; font-weight: bold; }
+    #mult { font-size: 14px; font-weight: bold; color: #9fb0c3; margin-top: 2px; }
+    #mult.hot { color: #ffd36b; }
+    #mult.hot-3 { color: #ffab4d; }
+    #mult.hot-4 { color: #ff7a4d; }
+    #mult.hot-5 { color: #ff4b4b; }
+    #combo-bar-bg { height: 4px; margin-top: 6px; background: rgba(255,255,255,.1); border-radius: 2px; overflow: hidden; }
+    #combo-bar { height: 100%; width: 0%; background: #ffd36b; border-radius: 2px; }
+
+    #feed {
+      position: absolute; top: 130px; right: 24px;
+      display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
+      font-size: 12px; color: #dfe6ee; text-align: right;
+    }
+    .feed-line {
+      padding: 3px 10px; background: rgba(10, 14, 20, .5); border-radius: 4px;
+      animation: feedline 4s forwards;
+    }
+    @keyframes feedline {
+      0% { opacity: 0; transform: translateX(20px); }
+      6% { opacity: 1; transform: translateX(0); }
+      80% { opacity: 1; }
+      100% { opacity: 0; }
+    }
+
+    #boss-panel {
+      top: 20px; left: 50%; transform: translateX(-50%);
+      width: min(460px, 44vw); text-align: center;
+    }
+    #boss-name { font-size: 13px; font-weight: bold; letter-spacing: 4px; color: #ff6b6b; margin-bottom: 6px; }
+    #boss-bar-bg { height: 10px; background: rgba(255,255,255,.1); border-radius: 5px; overflow: hidden; }
+    #boss-bar { height: 100%; width: 100%; background: linear-gradient(90deg, #d63737, #ff8a5c); border-radius: 5px; transition: width .1s; }
+
+    #banner {
+      position: absolute; left: 50%; top: 26%; transform: translateX(-50%);
+      font-size: 52px; font-weight: bold; letter-spacing: 10px; color: #fff;
+      text-shadow: 0 2px 18px rgba(0,0,0,.7); text-align: center;
+      opacity: 0; white-space: nowrap;
+    }
+    #banner span { display: block; font-size: 18px; letter-spacing: 6px; color: #ff6b6b; margin-top: 8px; }
+    #banner.show { animation: bannerin 2.6s ease-out forwards; }
+    @keyframes bannerin {
+      0% { opacity: 0; transform: translateX(-50%) scale(.85); }
+      12% { opacity: 1; transform: translateX(-50%) scale(1.04); }
+      18% { transform: translateX(-50%) scale(1); }
+      75% { opacity: 1; }
+      100% { opacity: 0; }
+    }
+
+    #popup {
+      position: absolute; left: 50%; top: 58%; transform: translateX(-50%);
+      font-size: 22px; font-weight: bold; color: #ffd36b; letter-spacing: 2px;
+      text-shadow: 0 2px 8px rgba(0,0,0,.8); opacity: 0; white-space: nowrap;
+    }
+    #popup.pop { animation: popup .9s ease-out forwards; }
+    @keyframes popup {
+      0% { opacity: 0; transform: translate(-50%, 12px) scale(.6); }
+      14% { opacity: 1; transform: translate(-50%, 0) scale(1.12); }
+      22% { transform: translate(-50%, 0) scale(1); }
+      70% { opacity: 1; }
+      100% { opacity: 0; transform: translate(-50%, -26px) scale(1); }
+    }
 
     #overlay {
       position: fixed; inset: 0; display: flex; flex-direction: column;
@@ -65,7 +130,7 @@
       text-align: center;
     }
     #overlay h1 { font-size: 44px; letter-spacing: 8px; color: #fff; }
-    #overlay #ov-msg { font-size: 16px; color: #ffd36b; }
+    #overlay #ov-msg { font-size: 16px; color: #ffd36b; line-height: 1.7; }
     #overlay #ov-sub { font-size: 13px; color: #9fb0c3; line-height: 1.8; }
     #overlay .prompt { margin-top: 18px; font-size: 14px; color: #7ce7a5; animation: pulse 1.4s infinite; }
     @keyframes pulse { 50% { opacity: .35; } }
@@ -77,10 +142,22 @@
     <div id="vignette"></div>
     <div id="crosshair"></div>
     <div id="hitmarker">&times;</div>
-    <div id="score-panel" class="panel">
-      <div id="kills">0</div>
-      <div id="kills-label">KILLS</div>
+    <div id="wave-panel" class="panel">
+      <div id="wave-num">WAVE 1</div>
+      <div id="wave-info">GET READY</div>
     </div>
+    <div id="boss-panel" class="panel hidden">
+      <div id="boss-name">THE WARDEN</div>
+      <div id="boss-bar-bg"><div id="boss-bar"></div></div>
+    </div>
+    <div id="score-panel" class="panel">
+      <div id="score">0</div>
+      <div id="mult">×1</div>
+      <div id="combo-bar-bg"><div id="combo-bar"></div></div>
+    </div>
+    <div id="feed"></div>
+    <div id="banner"></div>
+    <div id="popup"></div>
     <div id="health-panel" class="panel">
       <div id="health-label">HEALTH</div>
       <div id="health-bar-bg"><div id="health-bar"></div></div>
@@ -93,10 +170,11 @@
 
   <div id="overlay">
     <h1>MINI FPS</h1>
-    <div id="ov-msg">You vs. the bots. They shoot back.</div>
+    <div id="ov-msg">10 waves. Two bosses. They shoot back.</div>
     <div id="ov-sub">
-      WASD move &middot; SHIFT sprint &middot; SPACE jump<br />
-      MOUSE aim &middot; CLICK / HOLD shoot &middot; R reload &middot; ESC pause
+      WASD move &middot; SHIFT sprint &middot; SPACE jump &middot; R reload<br />
+      Climb the towers for high ground &middot; jump to dodge boss slams<br />
+      Chain kills fast for up to &times;5 score
     </div>
     <div class="prompt">CLICK TO PLAY</div>
   </div>
