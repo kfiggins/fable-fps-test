@@ -163,6 +163,8 @@ const ovPrompt = overlay.querySelector('.prompt');
 const upgradeScreen = el('upgrade-screen');
 const upgradeTitle = el('upgrade-title');
 const upgradeCards = el('upgrade-cards');
+const scopeOverlay = el('scope');
+const crosshair = el('crosshair');
 
 // --- game state ---
 let state = 'menu'; // menu | playing | paused | over
@@ -182,6 +184,9 @@ let vignetteAlpha = 0;
 let shake = 0;
 let stepAcc = 0;
 let heartbeatTimer = 0;
+let aiming = false; // right mouse held
+let adsT = 0; // 0 = hip, 1 = fully aimed (smoothed)
+let fovCurrent = BASE_FOV;
 
 // --- roguelike run state ---
 let stats = createStats();
@@ -330,6 +335,9 @@ function startGame() {
   reloading = false;
   fireCooldown = 0;
   firing = false;
+  aiming = false;
+  adsT = 0;
+  fovCurrent = BASE_FOV;
   vignetteAlpha = 0;
   shake = 0;
   feed.innerHTML = '';
@@ -447,6 +455,12 @@ function onWaveCleared() {
 function endGame(won) {
   state = 'over';
   firing = false;
+  aiming = false;
+  adsT = 0;
+  fovCurrent = BASE_FOV;
+  scopeOverlay.style.opacity = '0';
+  crosshair.style.opacity = '1';
+  viewmodels[currentWeaponId].visible = true;
   saveBest();
   const best = loadBest();
   document.exitPointerLock();
@@ -506,13 +520,16 @@ document.addEventListener('mousemove', (e) => {
 });
 
 document.addEventListener('mousedown', (e) => {
-  if (e.button === 0 && state === 'playing' && document.pointerLockElement === canvas) {
-    firing = true;
+  if (state === 'playing' && document.pointerLockElement === canvas) {
+    if (e.button === 0) firing = true;
+    if (e.button === 2) aiming = true;
   }
 });
 document.addEventListener('mouseup', (e) => {
   if (e.button === 0) firing = false;
+  if (e.button === 2) aiming = false;
 });
+document.addEventListener('contextmenu', (e) => e.preventDefault());
 
 document.addEventListener('keydown', (e) => {
   player.keys[e.code] = true;
@@ -822,18 +839,42 @@ player.onAirJump = () => {
   sounds.waveStart();
 };
 
-// --- gun animation ---
+// --- gun animation + aim-down-sights ---
 function updateGun(dt) {
+  const w = weapon();
+  const wantAds = aiming && !!w.zoomFov && state === 'playing' && waveState !== 'upgrade';
+  adsT += ((wantAds ? 1 : 0) - adsT) * Math.min(1, dt * 12);
+
   gunKick = Math.max(0, gunKick - dt * 9);
   bobTime += dt * Math.min(1, player.horizontalSpeed() / 5);
-  const bob = Math.sin(bobTime * 9) * 0.008;
+  const bobScale = 1 - adsT * 0.8;
+  const bob = Math.sin(bobTime * 9) * 0.008 * bobScale;
   const gun = viewmodels[currentWeaponId];
-  gun.position.set(
-    GUN_BASE.x + Math.cos(bobTime * 4.5) * 0.004,
-    GUN_BASE.y + bob,
-    GUN_BASE.z + gunKick * 0.07
-  );
+
+  const hipX = GUN_BASE.x + Math.cos(bobTime * 4.5) * 0.004 * bobScale;
+  const hipY = GUN_BASE.y + bob;
+  const hipZ = GUN_BASE.z + gunKick * 0.07;
+  if (w.adsPos && adsT > 0.01) {
+    gun.position.set(
+      hipX + (w.adsPos[0] - hipX) * adsT,
+      hipY + (w.adsPos[1] - hipY) * adsT,
+      hipZ + (w.adsPos[2] + gunKick * 0.05 - hipZ) * adsT
+    );
+  } else {
+    gun.position.set(hipX, hipY, hipZ);
+  }
   gun.rotation.x = gunKick * 0.14;
+
+  // scoped weapons hide the viewmodel and show the scope overlay instead
+  const scoped = w.scope && adsT > 0.5;
+  gun.visible = !scoped;
+  scopeOverlay.style.opacity = w.scope ? `${Math.max(0, (adsT - 0.5) * 2)}` : '0';
+  crosshair.style.opacity = scoped ? '0' : '1';
+
+  // zoom: lerp FOV toward the weapon's ADS FOV, scale mouse sensitivity with it
+  const targetFov = BASE_FOV + ((w.zoomFov ?? BASE_FOV) - BASE_FOV) * adsT;
+  fovCurrent += (targetFov - fovCurrent) * Math.min(1, dt * 14);
+  player.lookScale = Math.max(0.2, fovCurrent / BASE_FOV);
 }
 
 // --- HUD ---
@@ -928,7 +969,8 @@ renderer.setAnimationLoop(() => {
     player.dynamicSpeedMult =
       stats.speedMult *
       (adrenTimer > 0 ? 1 + 0.25 * stats.adrenaline : 1) *
-      (berserkActive() ? 1.25 : 1);
+      (berserkActive() ? 1.25 : 1) *
+      (1 - adsT * 0.4); // aiming slows you down
 
     player.update(dt, world.obstacleBoxes);
 
@@ -989,15 +1031,12 @@ renderer.setAnimationLoop(() => {
     }
   }
 
-  // screen shake — rotation-only so it can't disturb gameplay position
-  if (shake > 0.01) {
-    shake = Math.max(0, shake - dt * 2.4);
-    camera.rotation.z = (Math.random() - 0.5) * 0.045 * shake;
-    camera.fov = BASE_FOV + shake * 3;
-    camera.updateProjectionMatrix();
-  } else if (camera.rotation.z !== 0) {
-    camera.rotation.z = 0;
-    camera.fov = BASE_FOV;
+  // screen shake (rotation-only) + ADS zoom share the FOV
+  shake = Math.max(0, shake - dt * 2.4);
+  camera.rotation.z = shake > 0.01 ? (Math.random() - 0.5) * 0.045 * shake : 0;
+  const finalFov = fovCurrent + shake * 3;
+  if (Math.abs(camera.fov - finalFov) > 0.01) {
+    camera.fov = finalFov;
     camera.updateProjectionMatrix();
   }
 

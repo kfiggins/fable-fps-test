@@ -40,6 +40,17 @@
       box-shadow: inset 0 0 180px 60px rgba(220, 20, 20, .85);
     }
 
+    #scope {
+      position: absolute; inset: 0; opacity: 0; pointer-events: none;
+      background: radial-gradient(circle at center, transparent 26%, rgba(2, 4, 7, .97) 28.5%);
+    }
+    #scope::before, #scope::after {
+      content: ""; position: absolute; left: 50%; top: 50%;
+      background: rgba(10, 12, 16, .85);
+    }
+    #scope::before { width: 56%; height: 1.5px; transform: translate(-50%, -50%); }
+    #scope::after { width: 1.5px; height: 56%; transform: translate(-50%, -50%); }
+
     .panel {
       position: absolute; padding: 10px 16px;
       background: rgba(10, 14, 20, .55); border: 1px solid rgba(255,255,255,.12);
@@ -174,6 +185,7 @@
 <body>
   <div id="hud">
     <div id="vignette"></div>
+    <div id="scope"></div>
     <div id="crosshair"></div>
     <div id="hitmarker">&times;</div>
     <div id="wave-panel" class="panel">
@@ -214,7 +226,7 @@
     <div id="ov-msg">20 waves. Four bosses. They shoot back.</div>
     <div id="ov-sub">
       WASD move &middot; SHIFT sprint &middot; SPACE jump &middot; R reload &middot; G grenade<br />
-      Beat bosses to unlock new weapons &middot; Q / 1-4 to switch<br />
+      RIGHT-CLICK aim (rifle sights, marksman scope) &middot; Q / 1-4 switch weapon<br />
       Climb the towers &middot; jump to dodge boss slams &middot; chain kills for combo score
     </div>
     <div class="prompt">CLICK TO PLAY</div>

@@ -23,6 +23,7 @@ export class Player {
     this.onGround = true;
     this.timeSinceHit = 999;
 
+    this.lookScale = 1; // reduced while aiming down sights
     // modded by upgrades (main syncs these from the run's stats)
     this.dynamicSpeedMult = 1;
     this.jumpMult = 1;
@@ -52,10 +53,11 @@ export class Player {
   }
 
   look(dx, dy) {
-    this.camera.rotation.y -= dx * LOOK_SENSITIVITY;
+    const sens = LOOK_SENSITIVITY * this.lookScale;
+    this.camera.rotation.y -= dx * sens;
     this.camera.rotation.x = Math.max(
       -1.55,
-      Math.min(1.55, this.camera.rotation.x - dy * LOOK_SENSITIVITY)
+      Math.min(1.55, this.camera.rotation.x - dy * sens)
     );
   }
 
