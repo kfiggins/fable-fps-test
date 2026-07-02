@@ -23,7 +23,19 @@ Then open the printed URL (usually http://localhost:5173) and click to play.
 | Shift | Sprint |
 | Space | Jump (also dodges boss slams) |
 | R | Reload |
+| G | Throw grenade |
+| Q / 1–4 | Switch weapon |
 | Esc | Pause / release mouse |
+
+## Weapons
+
+You start with the **rifle**. Beating the wave 5/10/15 bosses lets you claim one of:
+**shotgun** (8 pellets, brutal close, falls off past 15m), **marksman** (huge single
+shots, built for headshots), **SMG** (24-round hose for close range). By wave 15 you
+have the full arsenal. Roguelike upgrades apply to every weapon.
+
+Enemies have an 8% chance to drop a **grenade** pickup (bosses always drop two).
+Carry up to 5; G throws them — big area damage, safe to yourself.
 
 ## The enemies
 

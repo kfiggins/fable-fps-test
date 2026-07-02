@@ -48,6 +48,15 @@ export function createStats() {
     doubleJump: false,
     secondWind: false,
     berserker: false,
+    scoreMult: 1,
+    highGround: 1, // damage mult while elevated
+    killStreak: false, // every 5th kill refills the mag
+    thorns: 0, // damage dealt back to melee attackers
+    doubleTap: false, // every 4th shot is free
+    bossSlayer: 1, // damage mult vs bosses
+    chainLightning: false, // kills arc damage to a nearby enemy
+    instantReload: false,
+    offerSize: 3, // upgrade cards per offer
   };
 }
 
@@ -65,10 +74,10 @@ export const UPGRADES = [
     apply: (s) => { s.maxHealthBonus += 15; } },
   { id: 'feet', tier: 'common', name: 'Fleet Foot', desc: '+8% move speed',
     apply: (s) => { s.speedMult *= 1.08; } },
-  { id: 'springs', tier: 'common', name: 'Coiled Springs', desc: '+10% jump height',
-    apply: (s) => { s.jumpMult *= 1.1; } },
   { id: 'dressing', tier: 'common', name: 'Field Dressing', desc: '+25% health regen rate',
     apply: (s) => { s.regenRate *= 1.25; } },
+  { id: 'greed', tier: 'common', name: 'Greed', desc: '+10% score from kills',
+    apply: (s) => { s.scoreMult *= 1.1; } },
 
   // ---- uncommon ----
   { id: 'hollow', tier: 'uncommon', name: 'Hollow Points', desc: '+20% damage',
@@ -83,10 +92,14 @@ export const UPGRADES = [
     apply: (s) => { s.killAmmo += 2; } },
   { id: 'longshot', tier: 'uncommon', name: 'Longshot', desc: '+25% damage beyond 25m',
     apply: (s) => { s.longshotMult *= 1.25; } },
-  { id: 'lightweight', tier: 'uncommon', name: 'Lightweight Frame', desc: '+12% speed, +10% jump',
-    apply: (s) => { s.speedMult *= 1.12; s.jumpMult *= 1.1; } },
+  { id: 'lightweight', tier: 'uncommon', name: 'Lightweight Frame', desc: '+15% move speed',
+    apply: (s) => { s.speedMult *= 1.15; } },
   { id: 'fieldmedic', tier: 'uncommon', name: 'Combat Medic', desc: 'Regen starts 2s sooner',
     apply: (s) => { s.regenDelay = Math.max(1, s.regenDelay - 2); } },
+  { id: 'highground', tier: 'uncommon', name: 'High Ground', desc: '+20% damage while elevated',
+    apply: (s) => { s.highGround *= 1.2; } },
+  { id: 'killstreak', tier: 'uncommon', name: 'Kill Streak', desc: 'Every 5th kill refills your mag', unique: true,
+    apply: (s) => { s.killStreak = true; } },
 
   // ---- rare ----
   { id: 'cranial', tier: 'rare', name: 'Cranial Trauma', desc: 'Headshots deal +50% damage',
@@ -105,6 +118,14 @@ export const UPGRADES = [
     apply: (s) => { s.comboMax += 1; } },
   { id: 'blastshield', tier: 'rare', name: 'Blast Shield', desc: 'Immune to boss ground slams', unique: true,
     apply: (s) => { s.shockImmune = true; } },
+  { id: 'thorns', tier: 'rare', name: 'Thorns', desc: 'Melee attackers take 50 damage',
+    apply: (s) => { s.thorns += 50; } },
+  { id: 'doubletap', tier: 'rare', name: 'Double Tap', desc: 'Every 4th shot is free', unique: true,
+    apply: (s) => { s.doubleTap = true; } },
+  { id: 'bossslayer', tier: 'rare', name: 'Boss Slayer', desc: '+30% damage to bosses',
+    apply: (s) => { s.bossSlayer *= 1.3; } },
+  { id: 'quartermaster', tier: 'rare', name: 'Quartermaster', desc: 'Upgrade offers show 4 choices', unique: true,
+    apply: (s) => { s.offerSize = 4; } },
 
   // ---- legendary ----
   { id: 'pierce', tier: 'legendary', name: 'Piercing Rounds', desc: 'Bullets pass through enemies', unique: true,
@@ -119,14 +140,18 @@ export const UPGRADES = [
     apply: (s) => { s.berserker = true; } },
   { id: 'goldengun', tier: 'legendary', name: 'Golden Gun', desc: '+100% damage, magazine capped at 6', unique: true,
     apply: (s) => { s.damageMult *= 2; s.magCap = 6; } },
+  { id: 'chain', tier: 'legendary', name: 'Chain Lightning', desc: 'Kills arc 40 damage to a nearby enemy', unique: true,
+    apply: (s) => { s.chainLightning = true; } },
+  { id: 'gunslinger', tier: 'legendary', name: 'Gunslinger', desc: 'Reloads are instant', unique: true,
+    apply: (s) => { s.instantReload = true; } },
 ];
 
 const TIER_ORDER = ['common', 'uncommon', 'rare', 'legendary'];
 
-// Three cards: each rolls its tier independently, no duplicate upgrades in
-// one offer, owned uniques never reappear. If a tier's pool is empty the
+// Each card rolls its tier independently, no duplicate upgrades in one
+// offer, owned uniques never reappear. If a tier's pool is empty the
 // card falls to the nearest tier that still has options.
-export function rollOffer(wave, ownedUniques) {
+export function rollOffer(wave, ownedUniques, count = 3) {
   const weights = tierWeights(wave);
   const picks = [];
   const pickedIds = new Set();
@@ -135,7 +160,7 @@ export function rollOffer(wave, ownedUniques) {
       (u) => u.tier === tier && !pickedIds.has(u.id) && !(u.unique && ownedUniques.has(u.id))
     );
 
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < count; i++) {
     const total = TIER_ORDER.reduce((sum, t) => sum + weights[t], 0);
     let r = Math.random() * total;
     let tier = 'common';

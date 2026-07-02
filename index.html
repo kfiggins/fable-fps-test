@@ -54,6 +54,7 @@
     #ammo-panel { right: 24px; bottom: 24px; text-align: right; }
     #ammo { font-size: 30px; font-weight: bold; }
     #ammo-label { font-size: 11px; letter-spacing: 2px; color: #9fb0c3; }
+    #grenades { font-size: 10px; letter-spacing: 1px; color: #3dd68c; margin-top: 4px; }
 
     #wave-panel { top: 20px; left: 24px; }
     #wave-num { font-size: 20px; font-weight: bold; color: #ffd36b; letter-spacing: 2px; }
@@ -197,13 +198,14 @@
     </div>
     <div id="ammo-panel" class="panel">
       <div id="ammo">10</div>
-      <div id="ammo-label">AMMO &middot; R TO RELOAD</div>
+      <div id="ammo-label">RIFLE &middot; R RELOAD</div>
+      <div id="grenades">GRENADES &times;1 &middot; G THROW</div>
     </div>
     <div id="build"></div>
   </div>
 
   <div id="upgrade-screen" class="hidden">
-    <h2>CHOOSE AN UPGRADE</h2>
+    <h2 id="upgrade-title">CHOOSE AN UPGRADE</h2>
     <div id="upgrade-cards"></div>
   </div>
 
@@ -211,9 +213,9 @@
     <h1>MINI FPS</h1>
     <div id="ov-msg">20 waves. Four bosses. They shoot back.</div>
     <div id="ov-sub">
-      WASD move &middot; SHIFT sprint &middot; SPACE jump &middot; R reload<br />
-      Climb the towers for high ground &middot; jump to dodge boss slams<br />
-      Chain kills fast for up to &times;5 score
+      WASD move &middot; SHIFT sprint &middot; SPACE jump &middot; R reload &middot; G grenade<br />
+      Beat bosses to unlock new weapons &middot; Q / 1-4 to switch<br />
+      Climb the towers &middot; jump to dodge boss slams &middot; chain kills for combo score
     </div>
     <div class="prompt">CLICK TO PLAY</div>
   </div>

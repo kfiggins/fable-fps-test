@@ -5,14 +5,15 @@ import { BotManager, BOT_TYPES } from './bots.js';
 import { Effects } from './effects.js';
 import { Sounds } from './sounds.js';
 import { UPGRADES, TIERS, createStats, rollOffer } from './upgrades.js';
+import { WEAPONS, WEAPON_ORDER } from './weapons.js';
+import { GrenadeManager } from './grenades.js';
 
-const MAG_SIZE = 10;
-const FIRE_INTERVAL = 0.14;
-const RELOAD_TIME = 1.1;
-const BODY_DAMAGE = 34;
-const HEAD_DAMAGE = 100;
 const BASE_FOV = 75;
 const LONGSHOT_DIST = 25;
+const GRENADE_DROP_CHANCE = 0.08;
+const GRENADE_MAX = 5;
+const GRENADE_RADIUS = 6;
+const BOSS_WAVES = [5, 10, 15];
 
 // wave composition: [grunts, rushers, snipers, tanks] or a boss wave
 function mix(g, r, s, t) {
@@ -69,27 +70,68 @@ const player = new Player(camera);
 const effects = new Effects(scene);
 const sounds = new Sounds();
 const bots = new BotManager(scene, world, effects, sounds);
+const grenades = new GrenadeManager(scene, effects, sounds);
 
-// --- gun viewmodel ---
-function buildGun() {
+// --- weapon viewmodels ---
+const gunMat = new THREE.MeshStandardMaterial({ color: 0x2f3138, roughness: 0.5, metalness: 0.4 });
+const woodMat = new THREE.MeshStandardMaterial({ color: 0x5c4326, roughness: 0.7 });
+
+function buildViewmodel(id) {
   const g = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color: 0x2f3138, roughness: 0.5, metalness: 0.4 });
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.14, 0.5), mat);
-  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.32, 10), mat);
-  barrel.rotation.x = Math.PI / 2;
-  barrel.position.set(0, 0.03, -0.38);
-  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.16, 0.1), mat);
-  grip.position.set(0, -0.13, 0.14);
-  grip.rotation.x = 0.25;
-  const sight = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.05, 0.02), mat);
-  sight.position.set(0, 0.1, -0.18);
-  g.add(body, barrel, grip, sight);
+  if (id === 'rifle') {
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.14, 0.5), gunMat);
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.32, 10), gunMat);
+    barrel.rotation.x = Math.PI / 2;
+    barrel.position.set(0, 0.03, -0.38);
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.16, 0.1), gunMat);
+    grip.position.set(0, -0.13, 0.14);
+    grip.rotation.x = 0.25;
+    const sight = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.05, 0.02), gunMat);
+    sight.position.set(0, 0.1, -0.18);
+    g.add(body, barrel, grip, sight);
+  } else if (id === 'shotgun') {
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.15, 0.42), woodMat);
+    const b1 = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.34, 10), gunMat);
+    b1.rotation.x = Math.PI / 2;
+    b1.position.set(-0.033, 0.05, -0.36);
+    const b2 = b1.clone();
+    b2.position.x = 0.033;
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.16, 0.11), woodMat);
+    grip.position.set(0, -0.13, 0.15);
+    grip.rotation.x = 0.3;
+    g.add(body, b1, b2, grip);
+  } else if (id === 'marksman') {
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.13, 0.62), gunMat);
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.5, 10), gunMat);
+    barrel.rotation.x = Math.PI / 2;
+    barrel.position.set(0, 0.03, -0.52);
+    const scope = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.16, 10), gunMat);
+    scope.rotation.x = Math.PI / 2;
+    scope.position.set(0, 0.11, -0.1);
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.16, 0.1), woodMat);
+    grip.position.set(0, -0.13, 0.16);
+    grip.rotation.x = 0.25;
+    g.add(body, barrel, scope, grip);
+  } else {
+    // smg
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.13, 0.3), gunMat);
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.16, 10), gunMat);
+    barrel.rotation.x = Math.PI / 2;
+    barrel.position.set(0, 0.03, -0.22);
+    const mag = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.2, 0.09), gunMat);
+    mag.position.set(0, -0.15, 0.0);
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.13, 0.09), gunMat);
+    grip.position.set(0, -0.11, 0.12);
+    grip.rotation.x = 0.25;
+    g.add(body, barrel, mag, grip);
+  }
   g.position.set(0.24, -0.22, -0.5);
+  g.visible = false;
+  camera.add(g);
   return g;
 }
-const gun = buildGun();
-camera.add(gun);
-const GUN_BASE = gun.position.clone();
+const viewmodels = Object.fromEntries(WEAPON_ORDER.map((id) => [id, buildViewmodel(id)]));
+const GUN_BASE = new THREE.Vector3(0.24, -0.22, -0.5);
 let gunKick = 0;
 let bobTime = 0;
 
@@ -97,6 +139,8 @@ let bobTime = 0;
 const el = (id) => document.getElementById(id);
 const hudHealth = el('health-bar');
 const hudAmmo = el('ammo');
+const hudWeaponLabel = el('ammo-label');
+const hudGrenades = el('grenades');
 const hudScore = el('score');
 const hudMult = el('mult');
 const hudComboBar = el('combo-bar');
@@ -117,6 +161,7 @@ const ovSub = el('ov-sub');
 const ovTitle = overlay.querySelector('h1');
 const ovPrompt = overlay.querySelector('.prompt');
 const upgradeScreen = el('upgrade-screen');
+const upgradeTitle = el('upgrade-title');
 const upgradeCards = el('upgrade-cards');
 
 // --- game state ---
@@ -128,7 +173,6 @@ let score = 0;
 let kills = 0;
 let comboMult = 1;
 let comboTimer = 0;
-let ammo = MAG_SIZE;
 let reloading = false;
 let reloadTimer = 0;
 let fireCooldown = 0;
@@ -145,17 +189,39 @@ const owned = new Map(); // upgrade id -> stacks
 let secondWindUsed = false;
 let adrenTimer = 0;
 let invulnTimer = 0;
+let shotCounter = 0; // double tap
+let streakCounter = 0; // kill streak
 
-const magSize = () => {
-  const m = MAG_SIZE + stats.magBonus;
+// --- weapons / grenades run state ---
+let ownedWeapons = ['rifle'];
+let currentWeaponId = 'rifle';
+const weaponAmmo = { rifle: WEAPONS.rifle.mag };
+let grenadeCount = 1;
+let grenadeCd = 0;
+
+const weapon = () => WEAPONS[currentWeaponId];
+const magSize = (w = weapon()) => {
+  const m = w.mag + stats.magBonus;
   return stats.magCap ? Math.min(stats.magCap, m) : m;
 };
+const ammo = () => weaponAmmo[currentWeaponId];
+const setAmmo = (v) => { weaponAmmo[currentWeaponId] = v; };
 const berserkActive = () =>
   stats.berserker && player.health < player.maxHealth * 0.3;
 const ownedUniqueIds = () =>
   new Set(
     [...owned.keys()].filter((id) => UPGRADES.find((u) => u.id === id)?.unique)
   );
+
+function switchWeapon(id) {
+  if (!ownedWeapons.includes(id) || id === currentWeaponId) return;
+  viewmodels[currentWeaponId].visible = false;
+  currentWeaponId = id;
+  viewmodels[id].visible = true;
+  reloading = false;
+  fireCooldown = Math.max(fireCooldown, 0.25);
+  sounds.reload();
+}
 
 function syncStats() {
   const newMax = 100 + stats.maxHealthBonus;
@@ -166,7 +232,9 @@ function syncStats() {
   player.canDoubleJump = stats.doubleJump;
   player.regenDelay = stats.regenDelay;
   player.regenRate = stats.regenRate;
-  ammo = Math.min(ammo, magSize());
+  for (const id of ownedWeapons) {
+    weaponAmmo[id] = Math.min(weaponAmmo[id], magSize(WEAPONS[id]));
+  }
 }
 
 function updateBuildStrip() {
@@ -239,6 +307,17 @@ function startGame() {
   secondWindUsed = false;
   adrenTimer = 0;
   invulnTimer = 0;
+  shotCounter = 0;
+  streakCounter = 0;
+  ownedWeapons = ['rifle'];
+  for (const id of Object.keys(weaponAmmo)) delete weaponAmmo[id];
+  weaponAmmo.rifle = WEAPONS.rifle.mag;
+  viewmodels[currentWeaponId].visible = false;
+  currentWeaponId = 'rifle';
+  viewmodels.rifle.visible = true;
+  grenadeCount = 1;
+  grenadeCd = 0;
+  grenades.clear();
   player.maxHealth = 100;
   player.reset();
   syncStats();
@@ -248,7 +327,6 @@ function startGame() {
   kills = 0;
   comboMult = 1;
   comboTimer = 0;
-  ammo = magSize();
   reloading = false;
   fireCooldown = 0;
   firing = false;
@@ -270,26 +348,59 @@ function startWave(n) {
   else sounds.waveStart();
 }
 
-// --- upgrade offers ---
+// --- upgrade / weapon offers ---
+function makeCard({ label, color, name, desc, footer, onPick }) {
+  const card = document.createElement('button');
+  card.className = 'upgrade-card';
+  card.style.borderColor = color;
+  card.style.boxShadow = `0 0 24px ${color}33, inset 0 0 14px ${color}14`;
+  card.innerHTML =
+    `<div class="tier-label" style="color:${color}">${label}</div>` +
+    `<div class="upg-name">${name}</div>` +
+    `<div class="upg-desc">${desc}</div>` +
+    (footer ? `<div class="upg-owned">${footer}</div>` : '');
+  card.onclick = onPick;
+  upgradeCards.appendChild(card);
+}
+
 function showUpgradeOffer() {
   waveState = 'upgrade';
   firing = false;
-  const offer = rollOffer(waveNum, ownedUniqueIds());
+  upgradeTitle.textContent = 'CHOOSE AN UPGRADE';
+  const offer = rollOffer(waveNum, ownedUniqueIds(), stats.offerSize);
   upgradeCards.innerHTML = '';
   for (const upg of offer) {
     const tier = TIERS[upg.tier];
     const count = owned.get(upg.id) || 0;
-    const card = document.createElement('button');
-    card.className = 'upgrade-card';
-    card.style.borderColor = tier.color;
-    card.style.boxShadow = `0 0 24px ${tier.color}33, inset 0 0 14px ${tier.color}14`;
-    card.innerHTML =
-      `<div class="tier-label" style="color:${tier.color}">${tier.label}</div>` +
-      `<div class="upg-name">${upg.name}</div>` +
-      `<div class="upg-desc">${upg.desc}</div>` +
-      (count ? `<div class="upg-owned">owned ×${count}</div>` : '');
-    card.onclick = () => pickUpgrade(upg);
-    upgradeCards.appendChild(card);
+    makeCard({
+      label: tier.label,
+      color: tier.color,
+      name: upg.name,
+      desc: upg.desc,
+      footer: count ? `owned ×${count}` : '',
+      onPick: () => pickUpgrade(upg),
+    });
+  }
+  upgradeScreen.classList.remove('hidden');
+  document.exitPointerLock();
+}
+
+function showWeaponOffer() {
+  waveState = 'upgrade';
+  firing = false;
+  upgradeTitle.textContent = 'BOSS DOWN — CLAIM A WEAPON';
+  upgradeCards.innerHTML = '';
+  for (const id of WEAPON_ORDER) {
+    if (ownedWeapons.includes(id)) continue;
+    const w = WEAPONS[id];
+    makeCard({
+      label: 'WEAPON',
+      color: '#ff6b6b',
+      name: w.name,
+      desc: w.desc,
+      footer: `${w.mag} rounds · press ${WEAPON_ORDER.indexOf(id) + 1} or Q`,
+      onPick: () => pickWeapon(id),
+    });
   }
   upgradeScreen.classList.remove('hidden');
   document.exitPointerLock();
@@ -307,6 +418,17 @@ function pickUpgrade(upg) {
   startWave(waveNum + 1);
 }
 
+function pickWeapon(id) {
+  ownedWeapons.push(id);
+  weaponAmmo[id] = magSize(WEAPONS[id]);
+  switchWeapon(id);
+  addFeedLine(`WEAPON: ${WEAPONS[id].name}`);
+  sounds.pickup();
+  upgradeScreen.classList.add('hidden');
+  canvas.requestPointerLock();
+  startWave(waveNum + 1);
+}
+
 function onWaveCleared() {
   const bonus = waveNum * 250;
   score += bonus;
@@ -314,10 +436,12 @@ function onWaveCleared() {
   player.health = player.maxHealth;
   if (waveNum >= FINAL_WAVE) {
     endGame(true);
-  } else {
-    showPopup(`WAVE CLEARED +${bonus}`);
-    showUpgradeOffer();
+    return;
   }
+  showPopup(`WAVE CLEARED +${bonus}`);
+  const weaponsLeft = WEAPON_ORDER.some((id) => !ownedWeapons.includes(id));
+  if (BOSS_WAVES.includes(waveNum) && weaponsLeft) showWeaponOffer();
+  else showUpgradeOffer();
 }
 
 function endGame(won) {
@@ -369,7 +493,7 @@ document.addEventListener('pointerlockchange', () => {
     showOverlay(
       'PAUSED',
       `WAVE ${waveNum} · SCORE ${score.toLocaleString()}`,
-      'WASD move &middot; SHIFT sprint &middot; SPACE jump<br />CLICK shoot &middot; R reload &middot; jump to dodge boss slams',
+      'WASD move &middot; SHIFT sprint &middot; SPACE jump &middot; G grenade<br />Q / 1-4 switch weapon &middot; R reload &middot; jump to dodge boss slams',
       'CLICK TO RESUME'
     );
   }
@@ -396,7 +520,17 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     if (!e.repeat) player.wantJump = true;
   }
-  if (e.code === 'KeyR' && state === 'playing') startReload();
+  if (state !== 'playing') return;
+  if (e.code === 'KeyR') startReload();
+  if (e.code === 'KeyG') throwGrenade();
+  if (e.code === 'KeyQ') {
+    const idx = ownedWeapons.indexOf(currentWeaponId);
+    switchWeapon(ownedWeapons[(idx + 1) % ownedWeapons.length]);
+  }
+  if (/^Digit[1-4]$/.test(e.code)) {
+    const id = WEAPON_ORDER[Number(e.code.slice(5)) - 1];
+    if (id) switchWeapon(id);
+  }
 });
 document.addEventListener('keyup', (e) => {
   player.keys[e.code] = false;
@@ -423,7 +557,7 @@ function addKill(bot, part) {
   }
   comboMult = comboTimer > 0 ? Math.min(stats.comboMax, comboMult + 1) : 1;
   comboTimer = 4;
-  const total = Math.round((pts * comboMult) / 10) * 10;
+  const total = Math.round((pts * comboMult * stats.scoreMult) / 10) * 10;
   score += total;
   showPopup(`+${total}${tags.length ? ' ' + tags.join(' ') : ''}${comboMult > 1 ? ` ×${comboMult}` : ''}`);
   addFeedLine(`${bot.type.toUpperCase()} +${total}`);
@@ -438,66 +572,105 @@ function addKill(bot, part) {
 const raycaster = new THREE.Raycaster();
 const _origin = new THREE.Vector3();
 const _dir = new THREE.Vector3();
+const _pelletDir = new THREE.Vector3();
 const _muzzle = new THREE.Vector3();
 const _botCenter = new THREE.Vector3();
 
 function startReload() {
-  if (reloading || ammo === magSize()) return;
+  if (reloading || ammo() === magSize()) return;
+  if (stats.instantReload) {
+    setAmmo(magSize());
+    sounds.reload();
+    return;
+  }
   reloading = true;
-  reloadTimer = RELOAD_TIME / stats.reloadMult;
+  reloadTimer = weapon().reload / stats.reloadMult;
   sounds.reload();
 }
 
 function shotDamage(part, dist, bot) {
-  let dmg = part === 'head' ? HEAD_DAMAGE * stats.headshotMult : BODY_DAMAGE;
+  const w = weapon();
+  let dmg = part === 'head' ? w.head * stats.headshotMult : w.body;
   dmg *= stats.damageMult;
+  if (w.falloffStart && dist > w.falloffStart) {
+    const t = (dist - w.falloffStart) / (w.falloffEnd - w.falloffStart);
+    dmg *= Math.max(w.falloffMin, 1 - t * (1 - w.falloffMin));
+  }
   if (dist > LONGSHOT_DIST) dmg *= stats.longshotMult;
   if (bot && bot.health < bot.maxHealth * 0.3) dmg *= stats.executionerMult;
+  if (bot && bot.cfg.boss) dmg *= stats.bossSlayer;
   if (berserkActive()) dmg *= 1.5;
+  if (player.position.y - 1.7 > 0.9) dmg *= stats.highGround; // elevated
   return Math.round(dmg);
 }
 
-// central damage funnel so pierce/splash kills trigger the same effects
-function dealDamage(bot, dmg, part) {
+// central damage funnel so pierce/splash/grenade/chain kills all behave the same
+function dealDamage(bot, dmg, part, depth = 0) {
+  const wasBoss = bot.cfg.boss;
+  const pos = bot.group.position.clone();
   const died = bots.damage(bot, dmg);
   if (died) {
     addKill(bot, part);
     if (stats.killHeal) {
       player.health = Math.min(player.maxHealth, player.health + stats.killHeal);
     }
-    if (stats.killAmmo) ammo = Math.min(magSize(), ammo + stats.killAmmo);
+    if (stats.killAmmo) setAmmo(Math.min(magSize(), ammo() + stats.killAmmo));
     if (stats.adrenaline) adrenTimer = 3;
+    if (stats.killStreak) {
+      streakCounter++;
+      if (streakCounter >= 5) {
+        streakCounter = 0;
+        setAmmo(magSize());
+        addFeedLine('KILL STREAK — MAG REFILLED');
+        sounds.reload();
+      }
+    }
+    // grenade drops: bosses always drop 2, everyone else rolls the dice
+    if (wasBoss) {
+      grenades.spawnPickup(pos);
+      grenades.spawnPickup({ x: pos.x + 1.5, z: pos.z + 1.5 });
+    } else if (Math.random() < GRENADE_DROP_CHANCE) {
+      grenades.spawnPickup(pos);
+    }
+    // chain lightning arcs once per original kill
+    if (stats.chainLightning && depth === 0) {
+      let best = null;
+      let bestD = 8;
+      for (const b of bots.bots) {
+        if (!b.alive || b === bot) continue;
+        const d = b.group.position.distanceTo(pos);
+        if (d < bestD) {
+          bestD = d;
+          best = b;
+        }
+      }
+      if (best) {
+        const from = pos.clone();
+        from.y += 1;
+        const to = best.group.position.clone();
+        to.y += 1 * best.cfg.scale;
+        effects.tracer(from, to, 0x66ddff);
+        effects.spark(to, 0x66ddff);
+        dealDamage(best, 40, 'body', 1);
+      }
+    }
   }
   return died;
 }
 
-function tryShoot() {
-  if (fireCooldown > 0 || reloading) return;
-  if (ammo <= 0) {
-    sounds.empty();
-    startReload();
-    return;
-  }
-  fireCooldown = FIRE_INTERVAL / stats.fireRateMult;
-  ammo--;
-  gunKick = 1;
-  sounds.shoot();
-
-  camera.updateMatrixWorld(true);
-  camera.getWorldPosition(_origin);
-  camera.getWorldDirection(_dir);
-  raycaster.set(_origin, _dir);
+function fireRay(dir, seenAll) {
+  raycaster.set(_origin, dir);
   raycaster.far = 200;
-
   const hits = raycaster.intersectObjects([...bots.getTargets(), ...world.solids], false);
-  const end = _origin.clone().addScaledVector(_dir, 150);
-  const struck = []; // {bot, part, point, dist} — one entry per bot
+  const end = _origin.clone().addScaledVector(dir, 150);
+  const struck = [];
   const seen = new Set();
   for (const h of hits) {
     const ud = h.object.userData;
     if (ud && ud.bot) {
       if (!seen.has(ud.bot)) {
         seen.add(ud.bot);
+        seenAll.add(ud.bot);
         struck.push({ bot: ud.bot, part: ud.part, point: h.point, dist: h.distance });
       }
       if (!stats.pierce) {
@@ -509,37 +682,102 @@ function tryShoot() {
       break;
     }
   }
+  return { struck, end };
+}
 
-  if (struck.length) {
-    hitmarkerTimer = 0.12;
-    sounds.hit();
-    for (const s of struck) {
-      effects.spark(s.point, 0xff5555);
-      dealDamage(s.bot, shotDamage(s.part, s.dist, s.bot), s.part);
-    }
-  } else if (hits.length) {
-    effects.spark(end, 0xccc9a8);
+function tryShoot() {
+  if (fireCooldown > 0 || reloading) return;
+  const w = weapon();
+  if (ammo() <= 0) {
+    sounds.empty();
+    startReload();
+    return;
   }
+  fireCooldown = w.interval / stats.fireRateMult;
+  shotCounter++;
+  const freeShot = stats.doubleTap && shotCounter % 4 === 0;
+  if (!freeShot) setAmmo(ammo() - 1);
+  gunKick = 1;
+  sounds[w.sound]();
 
-  // explosive rounds: splash at the impact point
-  if (stats.explosive) {
-    effects.explosion(end, 0xff8833, 0.6);
-    addShake(0.12);
-    const splash = Math.round(BODY_DAMAGE * 0.5 * stats.damageMult);
-    for (const b of bots.bots) {
-      if (!b.alive || seen.has(b)) continue;
-      _botCenter.copy(b.group.position);
-      _botCenter.y += 0.9 * b.cfg.scale;
-      if (_botCenter.distanceTo(end) < 3) dealDamage(b, splash, 'body');
-    }
-  }
+  camera.updateMatrixWorld(true);
+  camera.getWorldPosition(_origin);
+  camera.getWorldDirection(_dir);
 
   _muzzle.set(0, 0.03, -0.55);
-  gun.localToWorld(_muzzle);
-  effects.tracer(_muzzle, end);
-  effects.flash(_muzzle);
+  viewmodels[currentWeaponId].localToWorld(_muzzle);
 
-  if (ammo === 0) startReload();
+  const seenAll = new Set();
+  let anyHit = false;
+  let firstEnd = null;
+  for (let p = 0; p < w.pellets; p++) {
+    _pelletDir.copy(_dir);
+    const spread = w.spread;
+    if (spread) {
+      _pelletDir.x += (Math.random() - 0.5) * 2 * spread;
+      _pelletDir.y += (Math.random() - 0.5) * 2 * spread;
+      _pelletDir.z += (Math.random() - 0.5) * 2 * spread;
+      _pelletDir.normalize();
+    }
+    const { struck, end } = fireRay(_pelletDir, seenAll);
+    if (!firstEnd) firstEnd = end;
+    if (struck.length) {
+      anyHit = true;
+      for (const s of struck) {
+        effects.spark(s.point, 0xff5555);
+        dealDamage(s.bot, shotDamage(s.part, s.dist, s.bot), s.part);
+      }
+    } else {
+      effects.spark(end, 0xccc9a8);
+    }
+    effects.tracer(_muzzle, end);
+  }
+  if (anyHit) {
+    hitmarkerTimer = 0.12;
+    sounds.hit();
+  }
+
+  // explosive rounds: one splash per trigger pull, at the first pellet's impact
+  if (stats.explosive && firstEnd) {
+    effects.explosion(firstEnd, 0xff8833, 0.6);
+    addShake(0.12);
+    const splash = Math.round(w.body * 0.5 * stats.damageMult);
+    for (const b of bots.bots) {
+      if (!b.alive || seenAll.has(b)) continue;
+      _botCenter.copy(b.group.position);
+      _botCenter.y += 0.9 * b.cfg.scale;
+      if (_botCenter.distanceTo(firstEnd) < 3) dealDamage(b, splash, 'body');
+    }
+  }
+
+  effects.flash(_muzzle);
+  if (ammo() === 0) startReload();
+}
+
+// --- grenades ---
+function throwGrenade() {
+  if (grenadeCount <= 0 || grenadeCd > 0 || waveState === 'upgrade') return;
+  grenadeCount--;
+  grenadeCd = 0.5;
+  grenades.throwFrom(camera);
+  sounds.empty();
+}
+
+function explodeGrenade(pos) {
+  effects.explosion(pos, 0xffaa22, 1.8);
+  effects.shockwave(pos, GRENADE_RADIUS, 0xffaa44);
+  addShake(0.9);
+  sounds.explosionBig();
+  for (const b of bots.bots) {
+    if (!b.alive) continue;
+    _botCenter.copy(b.group.position);
+    _botCenter.y += 0.9 * b.cfg.scale;
+    const d = _botCenter.distanceTo(pos);
+    if (d < GRENADE_RADIUS) {
+      const dmg = Math.round(120 * (1 - (0.6 * d) / GRENADE_RADIUS));
+      dealDamage(b, dmg, 'body');
+    }
+  }
 }
 
 // --- bot damage callbacks ---
@@ -548,11 +786,14 @@ bots.onBossEnraged = (bot) => {
   addShake(1);
 };
 
-bots.onPlayerHit = (dmg, kind) => {
+bots.onPlayerHit = (dmg, kind, sourceBot) => {
   if (invulnTimer > 0) return;
   if (kind === 'shock' && stats.shockImmune) {
     addFeedLine('SLAM BLOCKED');
     return;
+  }
+  if (kind === 'melee' && stats.thorns && sourceBot) {
+    dealDamage(sourceBot, stats.thorns, 'body');
   }
   const final = Math.max(1, Math.round(dmg * (1 - stats.damageReduction)));
   vignetteAlpha = 0.85;
@@ -586,6 +827,7 @@ function updateGun(dt) {
   gunKick = Math.max(0, gunKick - dt * 9);
   bobTime += dt * Math.min(1, player.horizontalSpeed() / 5);
   const bob = Math.sin(bobTime * 9) * 0.008;
+  const gun = viewmodels[currentWeaponId];
   gun.position.set(
     GUN_BASE.x + Math.cos(bobTime * 4.5) * 0.004,
     GUN_BASE.y + bob,
@@ -601,7 +843,9 @@ function updateHUD(dt) {
     player.health > player.maxHealth * 0.4
       ? 'linear-gradient(90deg, #37d67a, #7ce7a5)'
       : 'linear-gradient(90deg, #d63737, #e77c7c)';
-  hudAmmo.textContent = reloading ? '···' : `${ammo}`;
+  hudAmmo.textContent = reloading ? '···' : `${ammo()}`;
+  hudWeaponLabel.textContent = `${weapon().name} · R RELOAD`;
+  hudGrenades.textContent = `GRENADES ×${grenadeCount} · G THROW`;
   hudScore.textContent = score.toLocaleString();
   hudMult.textContent = `×${comboMult}`;
   hudMult.className = comboMult > 1 ? `hot hot-${Math.min(comboMult, 5)}` : '';
@@ -611,7 +855,7 @@ function updateHUD(dt) {
   if (waveState === 'intermission') {
     hudWaveInfo.textContent = `INCOMING ${Math.ceil(interTimer)}`;
   } else if (waveState === 'upgrade') {
-    hudWaveInfo.textContent = 'CHOOSE UPGRADE';
+    hudWaveInfo.textContent = 'CHOOSE';
   } else {
     hudWaveInfo.textContent = `ENEMIES ${bots.aliveCount()}`;
   }
@@ -637,12 +881,14 @@ function updateHUD(dt) {
 
 // debug/testing handle
 window.__game = {
-  player, bots, camera,
+  player, bots, camera, grenades,
   get stats_() { return stats; },
   owned,
   stats: () => ({
     state, waveState, wave: waveNum, score, mult: comboMult, kills,
-    ammo, mag: magSize(), health: player.health, maxHealth: player.maxHealth,
+    ammo: ammo(), mag: magSize(), weapon: currentWeaponId,
+    weapons: [...ownedWeapons], grenades: grenadeCount,
+    health: player.health, maxHealth: player.maxHealth,
     enemies: bots.aliveCount(),
   }),
   debug: {
@@ -659,7 +905,14 @@ window.__game = {
       updateBuildStrip();
       return true;
     },
-    roll: (w) => rollOffer(w ?? waveNum, ownedUniqueIds()).map((u) => ({ id: u.id, tier: u.tier })),
+    giveWeapon(id) {
+      if (!WEAPONS[id] || ownedWeapons.includes(id)) return false;
+      ownedWeapons.push(id);
+      weaponAmmo[id] = magSize(WEAPONS[id]);
+      return true;
+    },
+    grenades(n) { grenadeCount = n; },
+    roll: (w) => rollOffer(w ?? waveNum, ownedUniqueIds(), stats.offerSize).map((u) => ({ id: u.id, tier: u.tier })),
   },
 };
 
@@ -671,6 +924,7 @@ renderer.setAnimationLoop(() => {
   if (state === 'playing') {
     adrenTimer = Math.max(0, adrenTimer - dt);
     invulnTimer = Math.max(0, invulnTimer - dt);
+    grenadeCd = Math.max(0, grenadeCd - dt);
     player.dynamicSpeedMult =
       stats.speedMult *
       (adrenTimer > 0 ? 1 + 0.25 * stats.adrenaline : 1) *
@@ -689,6 +943,20 @@ renderer.setAnimationLoop(() => {
       if (bots.waveDone && state === 'playing') onWaveCleared();
     }
 
+    grenades.update(
+      dt,
+      player.position,
+      world.obstacleBoxes,
+      () => {
+        if (grenadeCount >= GRENADE_MAX) return false;
+        grenadeCount++;
+        addFeedLine('GRENADE +1');
+        sounds.pickup();
+        return true;
+      },
+      explodeGrenade
+    );
+
     fireCooldown -= dt;
     comboTimer = Math.max(0, comboTimer - dt);
     if (comboTimer === 0 && comboMult > 1) comboMult = 1;
@@ -696,7 +964,7 @@ renderer.setAnimationLoop(() => {
       reloadTimer -= dt;
       if (reloadTimer <= 0) {
         reloading = false;
-        ammo = magSize();
+        setAmmo(magSize());
       }
     }
     if (firing && waveState !== 'upgrade') tryShoot();
@@ -738,7 +1006,8 @@ renderer.setAnimationLoop(() => {
   renderer.render(scene, camera);
 });
 
-// menu shows your best run
+// initial weapon visible + menu shows your best run
+viewmodels.rifle.visible = true;
 {
   const best = loadBest();
   if (best.score > 0) {

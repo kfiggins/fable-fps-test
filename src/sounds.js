@@ -56,6 +56,28 @@ export class Sounds {
     this.noise(0.06, 0.35);
   }
 
+  shotgun() {
+    this.sweep('square', 170, 45, 0.2, 0.5);
+    this.noise(0.13, 0.55);
+  }
+
+  marksman() {
+    this.sweep('sawtooth', 1100, 110, 0.2, 0.35);
+    this.sweep('square', 240, 55, 0.16, 0.35);
+    this.noise(0.1, 0.35);
+  }
+
+  smg() {
+    this.sweep('square', 420, 100, 0.05, 0.22);
+    this.noise(0.03, 0.18);
+  }
+
+  explosionBig() {
+    this.sweep('sawtooth', 100, 22, 0.55, 0.65);
+    this.sweep('square', 60, 25, 0.4, 0.4, 0.02);
+    this.noise(0.35, 0.5);
+  }
+
   botShoot() {
     this.sweep('square', 180, 55, 0.1, 0.2);
     this.noise(0.05, 0.15);

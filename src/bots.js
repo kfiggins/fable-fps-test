@@ -461,7 +461,7 @@ export class BotManager {
         bot.meleePulse = 0.18;
         this.sounds.melee();
         const dmg = cfg.boss ? cfg.melee.dmg : Math.round(cfg.melee.dmg * this.dmgMult());
-        if (this.onPlayerHit) this.onPlayerHit(dmg, 'melee');
+        if (this.onPlayerHit) this.onPlayerHit(dmg, 'melee', bot);
       }
     }
 
