@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mini FPS</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>🎯</text></svg>" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+    body { font-family: "SF Mono", Menlo, monospace; user-select: none; }
+    canvas { display: block; }
+
+    #hud { position: fixed; inset: 0; pointer-events: none; }
+
+    #crosshair {
+      position: absolute; left: 50%; top: 50%;
+      width: 4px; height: 4px; margin: -2px 0 0 -2px;
+      background: #fff; border-radius: 50%;
+      box-shadow: 0 0 3px rgba(0,0,0,.8);
+    }
+    #crosshair::before, #crosshair::after {
+      content: ""; position: absolute; background: rgba(255,255,255,.85);
+    }
+    #crosshair::before { left: -9px; top: 1px; width: 22px; height: 2px;
+      clip-path: polygon(0 0, 27% 0, 27% 100%, 0 100%, 0 0, 100% 0, 100% 100%, 73% 100%, 73% 0); }
+    #crosshair::after { left: 1px; top: -9px; width: 2px; height: 22px;
+      clip-path: polygon(0 0, 100% 0, 100% 27%, 0 27%, 0 73%, 100% 73%, 100% 100%, 0 100%); }
+
+    #hitmarker {
+      position: absolute; left: 50%; top: 50%;
+      width: 24px; height: 24px; margin: -12px 0 0 -12px;
+      opacity: 0; color: #ff4b4b; font-size: 24px; line-height: 22px; text-align: center;
+      font-weight: bold; text-shadow: 0 0 4px rgba(0,0,0,.9);
+      transition: opacity .05s;
+    }
+
+    #vignette {
+      position: absolute; inset: 0; opacity: 0;
+      box-shadow: inset 0 0 180px 60px rgba(220, 20, 20, .85);
+    }
+
+    .panel {
+      position: absolute; padding: 10px 16px;
+      background: rgba(10, 14, 20, .55); border: 1px solid rgba(255,255,255,.12);
+      border-radius: 8px; color: #e8ecf1; backdrop-filter: blur(4px);
+    }
+    #health-panel { left: 24px; bottom: 24px; width: 220px; }
+    #health-label { font-size: 11px; letter-spacing: 2px; color: #9fb0c3; margin-bottom: 6px; }
+    #health-bar-bg { height: 12px; background: rgba(255,255,255,.1); border-radius: 6px; overflow: hidden; }
+    #health-bar { height: 100%; width: 100%; background: linear-gradient(90deg, #37d67a, #7ce7a5); border-radius: 6px; transition: width .15s; }
+
+    #ammo-panel { right: 24px; bottom: 24px; text-align: right; }
+    #ammo { font-size: 30px; font-weight: bold; }
+    #ammo-label { font-size: 11px; letter-spacing: 2px; color: #9fb0c3; }
+
+    #score-panel { top: 20px; left: 50%; transform: translateX(-50%); text-align: center; }
+    #kills { font-size: 24px; font-weight: bold; color: #ffd36b; }
+    #kills-label { font-size: 10px; letter-spacing: 2px; color: #9fb0c3; }
+
+    #overlay {
+      position: fixed; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 14px;
+      background: rgba(6, 9, 14, .78); color: #e8ecf1; cursor: pointer;
+      text-align: center;
+    }
+    #overlay h1 { font-size: 44px; letter-spacing: 8px; color: #fff; }
+    #overlay #ov-msg { font-size: 16px; color: #ffd36b; }
+    #overlay #ov-sub { font-size: 13px; color: #9fb0c3; line-height: 1.8; }
+    #overlay .prompt { margin-top: 18px; font-size: 14px; color: #7ce7a5; animation: pulse 1.4s infinite; }
+    @keyframes pulse { 50% { opacity: .35; } }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <div id="vignette"></div>
+    <div id="crosshair"></div>
+    <div id="hitmarker">&times;</div>
+    <div id="score-panel" class="panel">
+      <div id="kills">0</div>
+      <div id="kills-label">KILLS</div>
+    </div>
+    <div id="health-panel" class="panel">
+      <div id="health-label">HEALTH</div>
+      <div id="health-bar-bg"><div id="health-bar"></div></div>
+    </div>
+    <div id="ammo-panel" class="panel">
+      <div id="ammo">10</div>
+      <div id="ammo-label">AMMO &middot; R TO RELOAD</div>
+    </div>
+  </div>
+
+  <div id="overlay">
+    <h1>MINI FPS</h1>
+    <div id="ov-msg">You vs. the bots. They shoot back.</div>
+    <div id="ov-sub">
+      WASD move &middot; SHIFT sprint &middot; SPACE jump<br />
+      MOUSE aim &middot; CLICK / HOLD shoot &middot; R reload &middot; ESC pause
+    </div>
+    <div class="prompt">CLICK TO PLAY</div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
