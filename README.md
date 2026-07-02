@@ -1,8 +1,8 @@
 # Mini FPS
 
 A tiny browser-based first-person shooter built with [Three.js](https://threejs.org/) and Vite.
-Survive **10 waves** in a walled arena — climb the towers, hold the high ground, and take down
-two bosses along the way.
+Survive **20 waves** in a walled arena — climb the towers, hold the high ground, and take down
+four bosses along the way. Play it at **https://kfiggins.github.io/fable-fps-test/**.
 
 ## Run it
 
@@ -37,9 +37,12 @@ Every type trades a big strength for a big weakness:
 | **Sniper** | Long-range laser-telegraphed shots that HURT | One-shot fragile; panics and flees up close |
 | **The Warden** (wave 5) | Burst cannon, ground slam, summons rushers | Slam is dodged by jumping; slow |
 | **The Titan** (wave 10) | All of the above, bigger, plus an aimed cannon shot | Same weaknesses, bigger target |
+| **The Butcher** (wave 15) | Fast, melee monster, enrages at 40% health | Enormous headshot target |
+| **The Overlord** (wave 20) | The full kit — burst, cannon, slam, summons, enrage | You get everything you've learned |
 
 When a sniper's laser turns **red**, its aim is locked — move! Killing a boss wipes out
-everything else on the field.
+everything else on the field. Regular enemies gain health and damage every wave, and enraged
+bosses (glowing red) move and attack ~50% faster.
 
 ## Scoring
 

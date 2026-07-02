@@ -6,12 +6,14 @@ import { collideXZ, clampToArena } from './world.js';
 //  rusher — very fast, small target, brutal melee ↔ dies to a single body shot, no gun
 //  tank   — huge HP pool, heavy hits ↔ crawls, giant hitbox, slow fire
 //  sniper — long-range laser-telegraphed shots that HURT ↔ one-shot fragile, flees up close
-//  warden — wave-5 boss: burst cannon, ground slam (jump to dodge!), summons rushers
-//  titan  — wave-10 boss: everything the warden has, bigger, plus an aimed cannon shot
+//  warden   — wave-5 boss: burst cannon, ground slam (jump to dodge!), summons rushers
+//  titan    — wave-10 boss: everything the warden has, bigger, plus an aimed cannon shot
+//  butcher  — wave-15 boss: FAST melee monster that enrages at low health
+//  overlord — wave-20 boss: the full kit, huge, enrages — the final exam
 export const BOT_TYPES = {
   grunt: {
     hp: 100, speed: 4.4, scale: 1, points: 100, color: 0x3a4160, visor: 0xff2b2b,
-    ai: 'skirmish', range: [8, 20], usesCover: true,
+    ai: 'skirmish', range: [8, 20], usesCover: true, scalesHp: true,
     burst: { n: 3, gap: 0.13, dmg: [6, 10], spread: 0.035, interval: [1.6, 2.8] },
   },
   rusher: {
@@ -21,7 +23,7 @@ export const BOT_TYPES = {
   },
   tank: {
     hp: 240, speed: 2.0, scale: 1.5, points: 300, color: 0x3c5a3c, visor: 0xff9030,
-    ai: 'skirmish', range: [10, 24], wide: true,
+    ai: 'skirmish', range: [10, 24], wide: true, scalesHp: true,
     burst: { n: 1, gap: 0, dmg: [16, 22], spread: 0.055, interval: [2.6, 3.4], heavy: true },
   },
   sniper: {
@@ -43,6 +45,24 @@ export const BOT_TYPES = {
     shock: { dmg: 40, radius: 8, trigger: 6.5, cd: 4 },
     summon: { types: ['rusher', 'rusher', 'sniper'], cd: 14, max: 5 },
     aimed: { dmg: 40, telegraph: 1.1, lockTime: 0.3, interval: [8, 10] },
+  },
+  butcher: {
+    hp: 4000, speed: 4.2, scale: 2.4, points: 7000, color: 0x7a1500, visor: 0xff4444,
+    ai: 'skirmish', range: [3, 9], wide: true, spike: true, boss: true, name: 'THE BUTCHER',
+    burst: { n: 8, gap: 0.09, dmg: [8, 11], spread: 0.05, interval: [2.4, 3] },
+    melee: { dmg: 22, range: 3.4, cd: 1.2 },
+    shock: { dmg: 35, radius: 8, trigger: 6, cd: 3.5 },
+    summon: { types: ['rusher', 'rusher', 'rusher'], cd: 10, max: 6 },
+    enrage: { below: 0.4, speed: 1.4, rate: 1.5 },
+  },
+  overlord: {
+    hp: 7000, speed: 2.8, scale: 3.6, points: 15000, color: 0x2b2005, visor: 0xffcc00,
+    ai: 'skirmish', range: [8, 18], wide: true, boss: true, name: 'THE OVERLORD',
+    burst: { n: 10, gap: 0.08, dmg: [8, 12], spread: 0.05, interval: [2.2, 3] },
+    shock: { dmg: 45, radius: 9, trigger: 7, cd: 3 },
+    summon: { types: ['rusher', 'sniper', 'tank'], cd: 12, max: 6 },
+    aimed: { dmg: 50, telegraph: 0.9, lockTime: 0.3, interval: [6, 8] },
+    enrage: { below: 0.35, speed: 1.5, rate: 1.6 },
   },
 };
 
@@ -115,6 +135,7 @@ class Bot {
     this.health = cfg.hp;
     this.maxHealth = cfg.hp;
     this.isMinion = false;
+    this.enraged = false;
 
     this.time = Math.random() * 10;
     this.hitFlash = 0;
@@ -154,10 +175,21 @@ export class BotManager {
     this.coverSpots = world.coverSpots;
     this.raycaster = new THREE.Raycaster();
     this.onPlayerHit = null; // set by main: (damage, kind) => {}
+    this.onBossEnraged = null; // set by main: (bot) => {}
     this.bots = [];
     this.spawnQueue = [];
     this.spawnDelay = 0;
     this.boss = null;
+    this.waveNum = 1;
+  }
+
+  // regular enemies toughen up and hit harder as the waves climb
+  hpMult() {
+    return 1 + (this.waveNum - 1) * 0.04;
+  }
+
+  dmgMult() {
+    return 1 + (this.waveNum - 1) * 0.03;
   }
 
   get waveDone() {
@@ -206,6 +238,10 @@ export class BotManager {
   spawnBot(type, atPos, playerPos, isMinion = false) {
     const bot = new Bot(this.scene, type);
     bot.isMinion = isMinion;
+    if (bot.cfg.scalesHp) {
+      bot.maxHealth = Math.round(bot.cfg.hp * this.hpMult());
+      bot.health = bot.maxHealth;
+    }
     if (atPos) {
       bot.group.position.set(
         atPos.x + (Math.random() - 0.5) * 3,
@@ -244,7 +280,8 @@ export class BotManager {
 
   setFlash(bot, amount) {
     for (const m of bot.flashMats) {
-      m.emissive.setRGB(amount, amount, amount);
+      if (amount === 0 && bot.enraged) m.emissive.setRGB(0.45, 0.04, 0.04);
+      else m.emissive.setRGB(amount, amount, amount);
     }
   }
 
@@ -280,6 +317,7 @@ export class BotManager {
   }
 
   update(dt, player, waveNum) {
+    this.waveNum = waveNum;
     this.spawnDelay -= dt;
     while (this.spawnQueue.length && this.spawnDelay <= 0) {
       this.spawnBot(this.spawnQueue.shift(), null, player.position);
@@ -297,6 +335,12 @@ export class BotManager {
     const playerPos = player.position;
 
     bot.time += dt;
+    if (cfg.enrage && !bot.enraged && bot.health < bot.maxHealth * cfg.enrage.below) {
+      bot.enraged = true;
+      this.setFlash(bot, 0);
+      this.sounds.bossRoar();
+      if (this.onBossEnraged) this.onBossEnraged(bot);
+    }
     if (bot.hitFlash > 0) {
       bot.hitFlash -= dt;
       if (bot.hitFlash <= 0) this.setFlash(bot, 0);
@@ -397,6 +441,7 @@ export class BotManager {
     }
     bot.coverCooldown -= dt;
 
+    if (bot.enraged) speedMult *= cfg.enrage.speed;
     const len = Math.hypot(moveX, moveZ);
     if (len > 0.01) {
       pos.x += (moveX / len) * cfg.speed * speedMult * dt;
@@ -412,10 +457,11 @@ export class BotManager {
       bot.meleeTimer -= dt;
       const vertGap = Math.abs(playerPos.y - 1.7 - pos.y);
       if (dist < cfg.melee.range && vertGap < 1.2 && bot.meleeTimer <= 0) {
-        bot.meleeTimer = cfg.melee.cd;
+        bot.meleeTimer = cfg.melee.cd / (bot.enraged ? cfg.enrage.rate : 1);
         bot.meleePulse = 0.18;
         this.sounds.melee();
-        if (this.onPlayerHit) this.onPlayerHit(cfg.melee.dmg, 'melee');
+        const dmg = cfg.boss ? cfg.melee.dmg : Math.round(cfg.melee.dmg * this.dmgMult());
+        if (this.onPlayerHit) this.onPlayerHit(dmg, 'melee');
       }
     }
 
@@ -456,7 +502,7 @@ export class BotManager {
         bot.shootTimer -= dt;
         if (bot.shootTimer <= 0 && bot.hasLOS && dist < SHOOT_RANGE) {
           const [a, b] = cfg.burst.interval;
-          bot.shootTimer = a + Math.random() * (b - a);
+          bot.shootTimer = (a + Math.random() * (b - a)) / (bot.enraged ? cfg.enrage.rate : 1);
           bot.burstLeft = cfg.burst.n;
           bot.burstGap = 0;
         }
@@ -507,7 +553,8 @@ export class BotManager {
       if (bot.shootTimer <= 0 && bot.hasLOS && dist > 6) {
         bot.aimState = { t: 0, lockedPos: null, lostTime: 0 };
         const [a, b] = cfg.interval;
-        bot.shootTimer = a + Math.random() * (b - a);
+        bot.shootTimer =
+          (a + Math.random() * (b - a)) / (bot.enraged ? bot.cfg.enrage.rate : 1);
       }
       return;
     }
@@ -547,7 +594,8 @@ export class BotManager {
     bot.laser.material.color.setHex(st.lockedPos ? 0xff2222 : 0xffdd44);
 
     if (st.t >= cfg.telegraph) {
-      this.fireAimed(bot, st.lockedPos || player.position.clone(), player, cfg.dmg);
+      const dmg = bot.cfg.boss ? cfg.dmg : Math.round(cfg.dmg * this.dmgMult());
+      this.fireAimed(bot, st.lockedPos || player.position.clone(), player, dmg);
       bot.aimState = null;
       this.clearLaser(bot);
     }
@@ -576,7 +624,8 @@ export class BotManager {
     _aim.normalize();
 
     const [a, b] = burst.dmg;
-    const dmg = a + Math.floor(Math.random() * (b - a + 1));
+    let dmg = a + Math.floor(Math.random() * (b - a + 1));
+    if (!bot.cfg.boss) dmg = Math.round(dmg * this.dmgMult());
     this.resolveShot(bot, player, dmg, burst.heavy ? 0xffa030 : 0xff7a5c, false, burst.heavy);
   }
 

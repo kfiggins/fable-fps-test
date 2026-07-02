@@ -12,17 +12,36 @@ const BODY_DAMAGE = 34;
 const HEAD_DAMAGE = 100;
 const BASE_FOV = 75;
 
+// wave composition: [grunts, rushers, snipers, tanks] or a boss wave
+function mix(g, r, s, t) {
+  return [
+    ...Array(g).fill('grunt'),
+    ...Array(r).fill('rusher'),
+    ...Array(s).fill('sniper'),
+    ...Array(t).fill('tank'),
+  ];
+}
 const WAVES = [
-  ['grunt', 'grunt', 'grunt', 'grunt'],
-  ['grunt', 'grunt', 'grunt', 'grunt', 'grunt', 'rusher', 'rusher'],
-  ['grunt', 'grunt', 'grunt', 'grunt', 'rusher', 'rusher', 'rusher', 'sniper', 'sniper'],
-  ['grunt', 'grunt', 'grunt', 'grunt', 'rusher', 'rusher', 'rusher', 'sniper', 'sniper', 'tank', 'tank'],
+  mix(4, 0, 0, 0),
+  mix(5, 2, 0, 0),
+  mix(4, 3, 2, 0),
+  mix(4, 3, 2, 2),
   ['warden', 'rusher', 'rusher'],
-  ['grunt', 'grunt', 'grunt', 'grunt', 'grunt', 'grunt', 'rusher', 'rusher', 'rusher', 'rusher', 'sniper', 'sniper', 'tank', 'tank'],
-  ['grunt', 'grunt', 'grunt', 'grunt', 'grunt', 'rusher', 'rusher', 'rusher', 'rusher', 'sniper', 'sniper', 'sniper', 'tank', 'tank', 'tank'],
-  ['grunt', 'grunt', 'grunt', 'grunt', 'rusher', 'rusher', 'rusher', 'rusher', 'rusher', 'rusher', 'sniper', 'sniper', 'sniper', 'sniper', 'tank', 'tank', 'tank'],
-  ['grunt', 'grunt', 'grunt', 'grunt', 'grunt', 'grunt', 'rusher', 'rusher', 'rusher', 'rusher', 'rusher', 'sniper', 'sniper', 'sniper', 'sniper', 'tank', 'tank', 'tank', 'tank'],
+  mix(6, 4, 2, 2),
+  mix(5, 4, 3, 3),
+  mix(4, 6, 4, 3),
+  mix(6, 5, 4, 4),
   ['titan', 'grunt', 'grunt', 'sniper', 'sniper'],
+  mix(6, 5, 3, 3),
+  mix(6, 6, 4, 3),
+  mix(7, 6, 4, 4),
+  mix(6, 8, 5, 4),
+  ['butcher', 'rusher', 'rusher', 'tank'],
+  mix(8, 7, 5, 4),
+  mix(8, 8, 5, 5),
+  mix(8, 9, 6, 5),
+  mix(9, 10, 6, 6),
+  ['overlord', 'sniper', 'sniper', 'tank', 'tank'],
 ];
 const FINAL_WAVE = WAVES.length;
 
@@ -368,6 +387,11 @@ function tryShoot() {
 }
 
 // --- bot damage callback ---
+bots.onBossEnraged = (bot) => {
+  showBanner(`${bot.cfg.name} ENRAGED`, 'RUN.');
+  addShake(1);
+};
+
 bots.onPlayerHit = (dmg, kind) => {
   vignetteAlpha = 0.85;
   addShake(kind === 'shock' ? 1.3 : kind === 'melee' ? 0.7 : 0.35 + dmg / 60);
@@ -515,6 +539,6 @@ renderer.setAnimationLoop(() => {
 {
   const best = loadBest();
   if (best.score > 0) {
-    ovMsg.innerHTML = `10 waves. Two bosses. They shoot back.<br />BEST: ${best.score.toLocaleString()} (wave ${best.wave})`;
+    ovMsg.innerHTML = `${FINAL_WAVE} waves. Four bosses. They shoot back.<br />BEST: ${best.score.toLocaleString()} (wave ${best.wave})`;
   }
 }
