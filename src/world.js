@@ -2,6 +2,7 @@ import * as THREE from 'three';
 
 export const ARENA_HALF = 45;
 const WALL_HEIGHT = 6;
+const EYE = 1.7;
 
 // Push a position out of any box it overlaps, in the XZ plane only.
 // feetY/headY define the vertical span of the thing being collided.
@@ -65,10 +66,10 @@ export function createWorld(scene) {
   sun.shadow.camera.far = 160;
   scene.add(sun);
 
-  const solids = [];        // meshes bullets can hit (floor, walls, cover)
-  const occluders = [];     // meshes that block line of sight (walls, cover)
-  const obstacleBoxes = []; // Box3 used for movement collision
-  const coverSpots = [];    // {point, blockCenter} — spots the AI can hide at
+  const solids = [];
+  const occluders = [];
+  const obstacleBoxes = [];
+  const coverSpots = [];
 
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(ARENA_HALF * 2, ARENA_HALF * 2),
@@ -90,6 +91,7 @@ export function createWorld(scene) {
   const blockMat = new THREE.MeshStandardMaterial({ color: 0x7d848f, roughness: 0.9 });
   const towerMat = new THREE.MeshStandardMaterial({ color: 0x8a8fa3, roughness: 0.8 });
   const stepMat = new THREE.MeshStandardMaterial({ color: 0x767b8d, roughness: 0.85 });
+  const bldgMat = new THREE.MeshStandardMaterial({ color: 0x9c9482, roughness: 0.85 });
 
   function addBox(x, y, z, w, h, d, mat, { cover = false } = {}) {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
@@ -124,10 +126,10 @@ export function createWorld(scene) {
   addBox(-ARENA_HALF, WALL_HEIGHT / 2, 0, 1, WALL_HEIGHT, ARENA_HALF * 2 + 1, wallMat);
   addBox(ARENA_HALF, WALL_HEIGHT / 2, 0, 1, WALL_HEIGHT, ARENA_HALF * 2 + 1, wallMat);
 
-  // towers: solid 4m base, 7 steps up (0.5m risers — walkable via step-up),
-  // parapets on every side except the stair side
+  // ---- towers ----
   const TOWER_H = 4;
   const TOWER_W = 5;
+  const towers = [];
   function addTower(tx, tz, dirX, dirZ) {
     addBox(tx, TOWER_H / 2, tz, TOWER_W, TOWER_H, TOWER_W, towerMat, { cover: true });
 
@@ -141,7 +143,6 @@ export function createWorld(scene) {
       addBox(sx, top / 2, sz, w, top, d, stepMat);
     }
 
-    // parapets (0.8 high) on the three non-stair sides
     const p = TOWER_H + 0.4;
     const half = TOWER_W / 2;
     if (!(dirX === 1)) addBox(tx + half - 0.175, p, tz, 0.35, 0.8, TOWER_W, towerMat);
@@ -149,21 +150,171 @@ export function createWorld(scene) {
     if (!(dirZ === 1)) addBox(tx, p, tz + half - 0.175, TOWER_W, 0.8, 0.35, towerMat);
     if (!(dirZ === -1)) addBox(tx, p, tz - half + 0.175, TOWER_W, 0.8, 0.35, towerMat);
 
-    // full-height corner posts on the platform — cover to dodge behind up top
     const postOff = half - 0.45;
     const postH = 2.4;
     for (const [px, pz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
       addBox(tx + px * postOff, TOWER_H + postH / 2, tz + pz * postOff, 0.7, postH, 0.7, towerMat);
     }
-    // mid-edge post on the side opposite the stairs for the peek-and-hide spot
     addBox(tx - dirX * postOff, TOWER_H + postH / 2, tz - dirZ * postOff, 0.7, postH, 0.7, towerMat);
-  }
-  addTower(-28, -28, 1, 0);  // NW tower, stairs facing east
-  addTower(30, -14, -1, 0);  // E tower, stairs facing west
-  addTower(-4, 30, 0, -1);   // S tower, stairs facing north
 
-  // center block
-  addBox(0, 1.5, 0, 5, 3, 5, blockMat, { cover: true });
+    towers.push({
+      x: tx, z: tz, dirX, dirZ,
+      route: [
+        new THREE.Vector3(tx + dirX * 8.5, 0, tz + dirZ * 8.5),    // stair foot (aligned)
+        new THREE.Vector3(tx + dirX * 5.3, 1.75, tz + dirZ * 5.3), // mid stairs
+        new THREE.Vector3(tx + dirX * 1.8, 4, tz + dirZ * 1.8),    // platform edge
+        new THREE.Vector3(tx, 4, tz),                               // center
+      ],
+    });
+  }
+  addTower(-28, -28, 1, 0);
+  addTower(30, -14, -1, 0);
+  addTower(-4, 30, 0, -1);
+
+  // ---- central building: 3 floors + roof, interior stairs, windows ----
+  const BH = 3.2;   // per-floor height
+  const BHALF = 5;  // footprint half-size
+  const BT = 0.35;  // wall thickness
+  {
+    const sideDefs = [
+      { axis: 'z', pos: -BHALF + BT / 2 },
+      { axis: 'z', pos: BHALF - BT / 2 }, // south — ground-floor door
+      { axis: 'x', pos: -BHALF + BT / 2 },
+      { axis: 'x', pos: BHALF - BT / 2 },
+    ];
+    for (let f = 0; f < 3; f++) {
+      const base = f * BH;
+      for (let si = 0; si < 4; si++) {
+        const s = sideDefs[si];
+        const isDoor = f === 0 && si === 1;
+        const openW = isDoor ? 2.4 : 3;
+        const postLen = (2 * BHALF - openW) / 2;
+        for (const sign of [-1, 1]) {
+          const c = sign * (BHALF - postLen / 2);
+          if (s.axis === 'z') addBox(c, base + BH / 2, s.pos, postLen, BH, BT, bldgMat);
+          else addBox(s.pos, base + BH / 2, c, BT, BH, postLen, bldgMat);
+        }
+        // header above the opening; window walls also get a sill below
+        if (s.axis === 'z') {
+          addBox(0, base + (BH + 2.2) / 2, s.pos, openW, BH - 2.2, BT, bldgMat);
+          if (!isDoor) addBox(0, base + 0.55, s.pos, openW, 1.1, BT, bldgMat);
+        } else {
+          addBox(s.pos, base + (BH + 2.2) / 2, 0, BT, BH - 2.2, openW, bldgMat);
+          if (!isDoor) addBox(s.pos, base + 0.55, 0, BT, 1.1, openW, bldgMat);
+        }
+      }
+    }
+
+    // floor slabs + roof, each with a stairwell opening over its flight
+    const slabT = 0.35;
+    const slabDefs = [
+      { top: BH, side: 1 },
+      { top: 2 * BH, side: -1 },
+      { top: 3 * BH, side: 1 },
+    ];
+    for (const sl of slabDefs) {
+      const y = sl.top - slabT / 2;
+      // main slab covers everything except the stair strip
+      const mainMinX = sl.side === 1 ? -4.8 : -3.1;
+      const mainMaxX = sl.side === 1 ? 3.1 : 4.8;
+      addBox((mainMinX + mainMaxX) / 2, y, 0, mainMaxX - mainMinX, slabT, 9.6, bldgMat);
+      // landing strip: only the far end of the stair strip is solid
+      const stripX = sl.side === 1 ? 3.95 : -3.95;
+      addBox(stripX, y, 3.15, 1.7, slabT, 3.3, bldgMat);
+    }
+
+    // stair flights: 6 steps, 0.5 rise / 0.9 run, hugging alternating walls
+    const flightDefs = [
+      { x: 3.9, base: 0 },
+      { x: -3.9, base: BH },
+      { x: 3.9, base: 2 * BH },
+    ];
+    for (const fl of flightDefs) {
+      for (let i = 0; i < 6; i++) {
+        const h = 0.5 * (i + 1);
+        addBox(fl.x, fl.base + h / 2, -3.4 + i * 0.9, 1.5, h, 0.9, stepMat);
+      }
+    }
+
+    // interior lights so the floors aren't pitch black
+    for (let f = 0; f < 3; f++) {
+      const lamp = new THREE.PointLight(0xffe8c0, 6, 11);
+      lamp.position.set(0, f * BH + 2.6, 0);
+      scene.add(lamp);
+    }
+
+    // roof parapet
+    const py = 3 * BH + 0.3;
+    addBox(0, py, -BHALF + 0.15, 2 * BHALF, 0.6, 0.3, bldgMat);
+    addBox(0, py, BHALF - 0.15, 2 * BHALF, 0.6, 0.3, bldgMat);
+    addBox(-BHALF + 0.15, py, 0, 0.3, 0.6, 2 * BHALF, bldgMat);
+    addBox(BHALF - 0.15, py, 0, 0.3, 0.6, 2 * BHALF, bldgMat);
+
+    coverSpots.push(
+      { point: new THREE.Vector3(6.2, 0, 0), blockCenter: new THREE.Vector3(0, 0, 0) },
+      { point: new THREE.Vector3(-6.2, 0, 0), blockCenter: new THREE.Vector3(0, 0, 0) },
+      { point: new THREE.Vector3(0, 0, -6.2), blockCenter: new THREE.Vector3(0, 0, 0) }
+    );
+  }
+
+  // building waypoints for bot routing
+  const doorOut = new THREE.Vector3(0, 0, 6.3);
+  const doorIn = new THREE.Vector3(0, 0, 3.4);
+  // per flight: aligned foot just before step 0, mid-stairs, landing on the strip
+  const flights = [
+    [new THREE.Vector3(3.9, 0, -3.6), new THREE.Vector3(3.9, 2.0, -0.7), new THREE.Vector3(3.9, 3.2, 2.6)],
+    [new THREE.Vector3(-3.9, 3.2, -3.6), new THREE.Vector3(-3.9, 5.2, -0.7), new THREE.Vector3(-3.9, 6.4, 2.6)],
+    [new THREE.Vector3(3.9, 6.4, -3.6), new THREE.Vector3(3.9, 8.4, -0.7), new THREE.Vector3(3.9, 9.6, 2.6)],
+  ];
+
+  const inBuilding = (x, z) => Math.abs(x) < BHALF + 0.4 && Math.abs(z) < BHALF + 0.4;
+  const buildingFloor = (feet) => (feet < 2.6 ? 0 : feet < 5.8 ? 1 : feet < 9 ? 2 : 3);
+
+  function onTowerArea(t, x, z, feet) {
+    if (Math.abs(x - t.x) < 3.4 && Math.abs(z - t.z) < 3.4 && feet > 3.3) return true;
+    // on the stairs
+    const along = (x - t.x) * t.dirX + (z - t.z) * t.dirZ;
+    const perp = Math.abs((x - t.x) * t.dirZ - (z - t.z) * t.dirX);
+    return along > 2.4 && along < 9 && perp < 1.6 && feet > 0.3;
+  }
+
+  // How a ground bot reaches the player. Returns { key, points } or null
+  // (null = walk straight at them, the pre-building behavior).
+  function routeFor(botPos, playerPos) {
+    const pFeet = playerPos.y - EYE;
+    const bFeet = botPos.y;
+
+    if (inBuilding(playerPos.x, playerPos.z) || pFeet > 2.6) {
+      if (inBuilding(playerPos.x, playerPos.z)) {
+        const pFloor = buildingFloor(pFeet);
+        const botInside = inBuilding(botPos.x, botPos.z);
+        const bFloor = botInside ? buildingFloor(bFeet) : 0;
+        if (botInside && bFloor === pFloor) return null;
+        const points = [];
+        if (!botInside) points.push(doorOut, doorIn);
+        if (bFloor < pFloor) {
+          for (let f = bFloor; f < pFloor; f++) points.push(...flights[f]);
+        } else if (bFloor > pFloor) {
+          for (let f = bFloor - 1; f >= pFloor; f--) {
+            points.push(flights[f][2], flights[f][1], flights[f][0]);
+          }
+        }
+        if (!points.length) return null;
+        return { key: `b${bFloor}>${pFloor}${botInside ? '' : 'o'}`, points };
+      }
+    }
+
+    for (let i = 0; i < towers.length; i++) {
+      const t = towers[i];
+      if (onTowerArea(t, playerPos.x, playerPos.z, pFeet)) {
+        if (Math.abs(botPos.x - t.x) < 3.4 && Math.abs(botPos.z - t.z) < 3.4 && bFeet > 3.3) {
+          return null; // already up there with them
+        }
+        return { key: `t${i}`, points: t.route };
+      }
+    }
+    return null;
+  }
 
   // mid-map wall segments
   addBox(0, 1.2, -14, 9, 2.4, 1.2, blockMat, { cover: true });
@@ -199,5 +350,5 @@ export function createWorld(scene) {
     new THREE.Vector3(-20, 0, -40),
   ];
 
-  return { solids, occluders, obstacleBoxes, spawnPoints, coverSpots };
+  return { solids, occluders, obstacleBoxes, spawnPoints, coverSpots, routeFor };
 }

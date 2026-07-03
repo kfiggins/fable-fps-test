@@ -160,6 +160,25 @@ export class Sounds {
     this.sweep('sine', 930, 1560, 0.14, 0.25, 0.08);
   }
 
+  scrap() {
+    this.sweep('sine', 1150, 1550, 0.07, 0.18);
+  }
+
+  droneShot() {
+    this.sweep('sine', 950, 480, 0.06, 0.15);
+  }
+
+  reroll() {
+    this.sweep('square', 500, 700, 0.05, 0.2);
+    this.sweep('square', 700, 950, 0.05, 0.2, 0.07);
+  }
+
+  callout(n) {
+    const base = 380 + n * 110;
+    this.sweep('sine', base, base * 1.4, 0.1, 0.4);
+    this.sweep('sine', base * 1.3, base * 1.9, 0.14, 0.4, 0.09);
+  }
+
   victory() {
     this.sweep('sine', 520, 520, 0.14, 0.4);
     this.sweep('sine', 660, 660, 0.14, 0.4, 0.15);

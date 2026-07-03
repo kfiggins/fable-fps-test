@@ -38,8 +38,8 @@ export class Player {
   }
 
   reset() {
-    this.camera.position.set(0, EYE_HEIGHT, 12);
-    this.camera.rotation.set(0, 0, 0);
+    this.camera.position.set(16, EYE_HEIGHT, 16);
+    this.camera.rotation.set(0, -Math.PI / 4, 0);
     this.velocity.set(0, 0, 0);
     this.health = this.maxHealth;
     this.onGround = true;
@@ -120,6 +120,21 @@ export class Player {
     }
     this.velocity.y -= GRAVITY * dt;
     pos.y += this.velocity.y * dt;
+
+    // ceiling bonk: rising into the underside of a floating box (building slab)
+    if (this.velocity.y > 0) {
+      for (const b of obstacleBoxes) {
+        if (b.min.y < 0.5) continue; // grounded boxes are walls, not ceilings
+        if (pos.y >= b.min.y + 0.3 || pos.y + 0.45 <= b.min.y) continue;
+        if (
+          pos.x < b.min.x - RADIUS * 0.5 || pos.x > b.max.x + RADIUS * 0.5 ||
+          pos.z < b.min.z - RADIUS * 0.5 || pos.z > b.max.z + RADIUS * 0.5
+        ) continue;
+        pos.y = Math.min(pos.y, b.min.y - 0.25);
+        this.velocity.y = 0;
+        break;
+      }
+    }
 
     const feet = pos.y - EYE_HEIGHT;
     const support = groundHeight(pos, RADIUS * 0.6, feet, obstacleBoxes, STEP_HEIGHT);

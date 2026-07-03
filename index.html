@@ -80,6 +80,45 @@
     #mult.hot-5 { color: #ff4b4b; }
     #combo-bar-bg { height: 4px; margin-top: 6px; background: rgba(255,255,255,.1); border-radius: 2px; overflow: hidden; }
     #combo-bar { height: 100%; width: 0%; background: #ffd36b; border-radius: 2px; }
+    #scrap { font-size: 11px; letter-spacing: 2px; color: #ffc94d; margin-top: 6px; }
+
+    #callout {
+      position: absolute; left: 50%; top: 38%; transform: translateX(-50%);
+      font-size: 30px; font-weight: bold; letter-spacing: 6px;
+      text-shadow: 0 2px 12px rgba(0,0,0,.8); opacity: 0; white-space: nowrap;
+    }
+    #callout.tier-2 { color: #ffd36b; }
+    #callout.tier-3 { color: #ffab4d; }
+    #callout.tier-4 { color: #ff7a4d; }
+    #callout.tier-5 { color: #ff4b6b; }
+    #callout.pop { animation: calloutpop 1s ease-out forwards; }
+    @keyframes calloutpop {
+      0% { opacity: 0; transform: translateX(-50%) scale(.5); }
+      12% { opacity: 1; transform: translateX(-50%) scale(1.2); }
+      20% { transform: translateX(-50%) scale(1); }
+      70% { opacity: 1; }
+      100% { opacity: 0; transform: translateX(-50%) scale(1); }
+    }
+
+    #shop { display: flex; gap: 14px; align-items: center; }
+    #shop-scrap { font-size: 13px; letter-spacing: 2px; color: #ffc94d; margin-right: 8px; }
+    .shop-btn {
+      padding: 10px 16px; font-family: inherit; font-size: 12px; letter-spacing: 1px;
+      background: rgba(20, 27, 38, .95); color: #ffc94d;
+      border: 1px solid #ffc94d66; border-radius: 8px; cursor: pointer;
+      transition: transform .1s;
+    }
+    .shop-btn:hover { transform: translateY(-2px); border-color: #ffc94d; }
+    .shop-btn.disabled { color: #5a6270; border-color: #3a4150; cursor: default; }
+    .shop-btn.disabled:hover { transform: none; }
+
+    #run-stats { display: flex; flex-direction: column; gap: 4px; min-width: 380px; margin-top: 6px; }
+    .stat-row {
+      display: flex; justify-content: space-between; gap: 30px;
+      font-size: 12px; color: #9fb0c3; padding: 3px 10px;
+      background: rgba(255,255,255,.04); border-radius: 4px;
+    }
+    .stat-row span:last-child { color: #e8ecf1; text-align: right; }
 
     #feed {
       position: absolute; top: 130px; right: 24px;
@@ -163,6 +202,9 @@
     .upgrade-card:nth-child(3) { animation-delay: .16s; }
     @keyframes cardin { from { opacity: 0; transform: translateY(18px); } }
     .upgrade-card:hover { transform: translateY(-6px) scale(1.03); }
+    #upgrade-screen.locked .upgrade-card,
+    #upgrade-screen.locked .shop-btn { pointer-events: none; opacity: .55; }
+    #upgrade-screen.locked .upgrade-card { cursor: default; }
     .tier-label { font-size: 10px; font-weight: bold; letter-spacing: 3px; margin-bottom: 12px; }
     .upg-name { font-size: 17px; font-weight: bold; margin-bottom: 10px; }
     .upg-desc { font-size: 12px; color: #9fb0c3; line-height: 1.6; }
@@ -200,7 +242,9 @@
       <div id="score">0</div>
       <div id="mult">×1</div>
       <div id="combo-bar-bg"><div id="combo-bar"></div></div>
+      <div id="scrap">SCRAP 0</div>
     </div>
+    <div id="callout"></div>
     <div id="feed"></div>
     <div id="banner"></div>
     <div id="popup"></div>
@@ -219,11 +263,13 @@
   <div id="upgrade-screen" class="hidden">
     <h2 id="upgrade-title">CHOOSE AN UPGRADE</h2>
     <div id="upgrade-cards"></div>
+    <div id="shop"></div>
   </div>
 
   <div id="overlay">
     <h1>MINI FPS</h1>
     <div id="ov-msg">20 waves. Four bosses. They shoot back.</div>
+    <div id="run-stats"></div>
     <div id="ov-sub">
       WASD move &middot; SHIFT sprint &middot; SPACE jump &middot; R reload &middot; G grenade<br />
       RIGHT-CLICK aim (rifle sights, marksman scope) &middot; Q / 1-4 switch weapon<br />

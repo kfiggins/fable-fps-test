@@ -7,15 +7,19 @@ import { Sounds } from './sounds.js';
 import { UPGRADES, TIERS, createStats, rollOffer } from './upgrades.js';
 import { WEAPONS, WEAPON_ORDER } from './weapons.js';
 import { GrenadeManager } from './grenades.js';
+import { DroneManager, DRONE_MAX } from './drone.js';
 
 const BASE_FOV = 75;
 const LONGSHOT_DIST = 25;
 const GRENADE_DROP_CHANCE = 0.08;
+const SCRAP_DROP_CHANCE = 0.45;
 const GRENADE_MAX = 5;
 const GRENADE_RADIUS = 6;
 const BOSS_WAVES = [5, 10, 15];
+const COST_REROLL = 50;
+const COST_GRENADE = 30;
+const COST_DRONE = 100;
 
-// wave composition: [grunts, rushers, snipers, tanks] or a boss wave
 function mix(g, r, s, t) {
   return [
     ...Array(g).fill('grunt'),
@@ -48,6 +52,10 @@ const WAVES = [
 ];
 const FINAL_WAVE = WAVES.length;
 
+// scrap dropped per kill (when the roll hits)
+const SCRAP_VALUES = { grunt: 10, rusher: 12, sniper: 15, tank: 25 };
+const SCRAP_BOSS = 150;
+
 // --- renderer / scene ---
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -71,6 +79,7 @@ const effects = new Effects(scene);
 const sounds = new Sounds();
 const bots = new BotManager(scene, world, effects, sounds);
 const grenades = new GrenadeManager(scene, effects, sounds);
+const drones = new DroneManager(scene, world.occluders, effects, sounds);
 
 // --- weapon viewmodels ---
 const gunMat = new THREE.MeshStandardMaterial({ color: 0x2f3138, roughness: 0.5, metalness: 0.4 });
@@ -89,18 +98,7 @@ function buildViewmodel(id) {
     const sight = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.05, 0.02), gunMat);
     sight.position.set(0, 0.1, -0.18);
     g.add(body, barrel, grip, sight);
-  } else if (id === 'shotgun') {
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.15, 0.42), woodMat);
-    const b1 = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.34, 10), gunMat);
-    b1.rotation.x = Math.PI / 2;
-    b1.position.set(-0.033, 0.05, -0.36);
-    const b2 = b1.clone();
-    b2.position.x = 0.033;
-    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.16, 0.11), woodMat);
-    grip.position.set(0, -0.13, 0.15);
-    grip.rotation.x = 0.3;
-    g.add(body, b1, b2, grip);
-  } else if (id === 'marksman') {
+  } else {
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.13, 0.62), gunMat);
     const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.5, 10), gunMat);
     barrel.rotation.x = Math.PI / 2;
@@ -112,18 +110,6 @@ function buildViewmodel(id) {
     grip.position.set(0, -0.13, 0.16);
     grip.rotation.x = 0.25;
     g.add(body, barrel, scope, grip);
-  } else {
-    // smg
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.13, 0.3), gunMat);
-    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.16, 10), gunMat);
-    barrel.rotation.x = Math.PI / 2;
-    barrel.position.set(0, 0.03, -0.22);
-    const mag = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.2, 0.09), gunMat);
-    mag.position.set(0, -0.15, 0.0);
-    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.13, 0.09), gunMat);
-    grip.position.set(0, -0.11, 0.12);
-    grip.rotation.x = 0.25;
-    g.add(body, barrel, mag, grip);
   }
   g.position.set(0.24, -0.22, -0.5);
   g.visible = false;
@@ -142,6 +128,7 @@ const hudAmmo = el('ammo');
 const hudWeaponLabel = el('ammo-label');
 const hudGrenades = el('grenades');
 const hudScore = el('score');
+const hudScrap = el('scrap');
 const hudMult = el('mult');
 const hudComboBar = el('combo-bar');
 const hudWaveNum = el('wave-num');
@@ -150,6 +137,7 @@ const bossPanel = el('boss-panel');
 const bossName = el('boss-name');
 const bossBar = el('boss-bar');
 const banner = el('banner');
+const callout = el('callout');
 const popup = el('popup');
 const feed = el('feed');
 const buildStrip = el('build');
@@ -158,20 +146,23 @@ const vignette = el('vignette');
 const overlay = el('overlay');
 const ovMsg = el('ov-msg');
 const ovSub = el('ov-sub');
+const ovStats = el('run-stats');
 const ovTitle = overlay.querySelector('h1');
 const ovPrompt = overlay.querySelector('.prompt');
 const upgradeScreen = el('upgrade-screen');
 const upgradeTitle = el('upgrade-title');
 const upgradeCards = el('upgrade-cards');
+const shopBar = el('shop');
 const scopeOverlay = el('scope');
 const crosshair = el('crosshair');
 
 // --- game state ---
-let state = 'menu'; // menu | playing | paused | over
+let state = 'menu';
 let waveNum = 0;
 let waveState = 'idle'; // intermission | active | upgrade
 let interTimer = 0;
 let score = 0;
+let scrap = 0;
 let kills = 0;
 let comboMult = 1;
 let comboTimer = 0;
@@ -184,25 +175,43 @@ let vignetteAlpha = 0;
 let shake = 0;
 let stepAcc = 0;
 let heartbeatTimer = 0;
-let aiming = false; // right mouse held
-let adsT = 0; // 0 = hip, 1 = fully aimed (smoothed)
+let aiming = false;
+let adsT = 0;
 let fovCurrent = BASE_FOV;
 
 // --- roguelike run state ---
 let stats = createStats();
-const owned = new Map(); // upgrade id -> stacks
+const owned = new Map();
 let secondWindUsed = false;
 let adrenTimer = 0;
+let surgeTimer = 0;
 let invulnTimer = 0;
-let shotCounter = 0; // double tap
-let streakCounter = 0; // kill streak
+let shotCounter = 0;
+let streakCounter = 0;
+let pendingBossOffer = false;
+let offerOpenedAt = 0; // guards against click-through when the offer appears
+
+function offerLocked() {
+  return performance.now() - offerOpenedAt < 700;
+}
 
 // --- weapons / grenades run state ---
-let ownedWeapons = ['rifle'];
 let currentWeaponId = 'rifle';
-const weaponAmmo = { rifle: WEAPONS.rifle.mag };
+const weaponAmmo = { rifle: WEAPONS.rifle.mag, marksman: WEAPONS.marksman.mag };
 let grenadeCount = 1;
 let grenadeCd = 0;
+
+// --- run stats (end screen) ---
+let run = null;
+function freshRunStats() {
+  return {
+    shotsFired: 0, shotsHit: 0, damageDealt: 0,
+    killsBy: { rifle: 0, marksman: 0, grenade: 0, drone: 0, other: 0 },
+    headshotKills: 0, grenadesThrown: 0, scrapEarned: 0, maxCombo: 1,
+  };
+}
+run = freshRunStats();
+const killTimes = [];
 
 const weapon = () => WEAPONS[currentWeaponId];
 const magSize = (w = weapon()) => {
@@ -211,15 +220,18 @@ const magSize = (w = weapon()) => {
 };
 const ammo = () => weaponAmmo[currentWeaponId];
 const setAmmo = (v) => { weaponAmmo[currentWeaponId] = v; };
+const healCap = () => player.maxHealth * (stats.overshield ? 1.3 : 1);
 const berserkActive = () =>
   stats.berserker && player.health < player.maxHealth * 0.3;
+const fireRateMult = () =>
+  stats.fireRateMult * (surgeTimer > 0 ? 1.3 ** stats.adrenalSurge : 1);
 const ownedUniqueIds = () =>
   new Set(
     [...owned.keys()].filter((id) => UPGRADES.find((u) => u.id === id)?.unique)
   );
 
 function switchWeapon(id) {
-  if (!ownedWeapons.includes(id) || id === currentWeaponId) return;
+  if (!WEAPONS[id] || id === currentWeaponId) return;
   viewmodels[currentWeaponId].visible = false;
   currentWeaponId = id;
   viewmodels[id].visible = true;
@@ -232,12 +244,13 @@ function syncStats() {
   const newMax = 100 + stats.maxHealthBonus;
   if (newMax > player.maxHealth) player.health += newMax - player.maxHealth;
   player.maxHealth = newMax;
-  player.health = Math.min(player.health, newMax);
+  player.health = Math.min(player.health, healCap());
   player.jumpMult = stats.jumpMult;
   player.canDoubleJump = stats.doubleJump;
   player.regenDelay = stats.regenDelay;
   player.regenRate = stats.regenRate;
-  for (const id of ownedWeapons) {
+  bots.speedScale = stats.enemySlow;
+  for (const id of WEAPON_ORDER) {
     weaponAmmo[id] = Math.min(weaponAmmo[id], magSize(WEAPONS[id]));
   }
 }
@@ -282,6 +295,15 @@ function showBanner(text, sub = '') {
   banner.classList.add('show');
 }
 
+function showCallout(n) {
+  const labels = { 2: 'DOUBLE KILL', 3: 'TRIPLE KILL', 4: 'QUAD KILL' };
+  callout.textContent = labels[n] || 'RAMPAGE';
+  callout.className = `show tier-${Math.min(n, 5)}`;
+  void callout.offsetWidth;
+  callout.classList.add('pop');
+  sounds.callout(Math.min(n, 5));
+}
+
 function showPopup(text) {
   popup.textContent = text;
   popup.classList.remove('pop');
@@ -298,10 +320,11 @@ function addFeedLine(text) {
   setTimeout(() => line.remove(), 4000);
 }
 
-function showOverlay(title, msg, sub, prompt) {
+function showOverlay(title, msg, sub, prompt, statsHtml = '') {
   ovTitle.textContent = title;
   ovMsg.innerHTML = msg;
   ovSub.innerHTML = sub;
+  ovStats.innerHTML = statsHtml;
   ovPrompt.textContent = prompt;
   overlay.classList.remove('hidden');
 }
@@ -311,24 +334,28 @@ function startGame() {
   owned.clear();
   secondWindUsed = false;
   adrenTimer = 0;
+  surgeTimer = 0;
   invulnTimer = 0;
   shotCounter = 0;
   streakCounter = 0;
-  ownedWeapons = ['rifle'];
-  for (const id of Object.keys(weaponAmmo)) delete weaponAmmo[id];
+  run = freshRunStats();
+  killTimes.length = 0;
   weaponAmmo.rifle = WEAPONS.rifle.mag;
+  weaponAmmo.marksman = WEAPONS.marksman.mag;
   viewmodels[currentWeaponId].visible = false;
   currentWeaponId = 'rifle';
   viewmodels.rifle.visible = true;
   grenadeCount = 1;
   grenadeCd = 0;
   grenades.clear();
+  drones.clear();
   player.maxHealth = 100;
   player.reset();
   syncStats();
   updateBuildStrip();
   bots.clearAll();
   score = 0;
+  scrap = 0;
   kills = 0;
   comboMult = 1;
   comboTimer = 0;
@@ -356,61 +383,77 @@ function startWave(n) {
   else sounds.waveStart();
 }
 
-// --- upgrade / weapon offers ---
-function makeCard({ label, color, name, desc, footer, onPick }) {
-  const card = document.createElement('button');
-  card.className = 'upgrade-card';
-  card.style.borderColor = color;
-  card.style.boxShadow = `0 0 24px ${color}33, inset 0 0 14px ${color}14`;
-  card.innerHTML =
-    `<div class="tier-label" style="color:${color}">${label}</div>` +
-    `<div class="upg-name">${name}</div>` +
-    `<div class="upg-desc">${desc}</div>` +
-    (footer ? `<div class="upg-owned">${footer}</div>` : '');
-  card.onclick = onPick;
-  upgradeCards.appendChild(card);
-}
-
-function showUpgradeOffer() {
-  waveState = 'upgrade';
-  firing = false;
-  upgradeTitle.textContent = 'CHOOSE AN UPGRADE';
-  const offer = rollOffer(waveNum, ownedUniqueIds(), stats.offerSize);
+// --- upgrade offers + scrap shop ---
+function renderOffer() {
+  const offer = rollOffer(waveNum, ownedUniqueIds(), stats.offerSize, pendingBossOffer);
   upgradeCards.innerHTML = '';
   for (const upg of offer) {
     const tier = TIERS[upg.tier];
     const count = owned.get(upg.id) || 0;
-    makeCard({
-      label: tier.label,
-      color: tier.color,
-      name: upg.name,
-      desc: upg.desc,
-      footer: count ? `owned ×${count}` : '',
-      onPick: () => pickUpgrade(upg),
-    });
+    const card = document.createElement('button');
+    card.className = 'upgrade-card';
+    card.style.borderColor = tier.color;
+    card.style.boxShadow = `0 0 24px ${tier.color}33, inset 0 0 14px ${tier.color}14`;
+    card.innerHTML =
+      `<div class="tier-label" style="color:${tier.color}">${tier.label}</div>` +
+      `<div class="upg-name">${upg.name}</div>` +
+      `<div class="upg-desc">${upg.desc}</div>` +
+      (count ? `<div class="upg-owned">owned ×${count}</div>` : '');
+    card.onclick = () => {
+      if (!offerLocked()) pickUpgrade(upg);
+    };
+    upgradeCards.appendChild(card);
   }
-  upgradeScreen.classList.remove('hidden');
-  document.exitPointerLock();
+  renderShop();
 }
 
-function showWeaponOffer() {
+function renderShop() {
+  shopBar.innerHTML = `<span id="shop-scrap">SCRAP ${scrap}</span>`;
+  const items = [
+    {
+      label: `REROLL — ${COST_REROLL}`,
+      cost: COST_REROLL,
+      can: scrap >= COST_REROLL,
+      act: () => { scrap -= COST_REROLL; sounds.reroll(); renderOffer(); },
+    },
+    {
+      label: grenadeCount >= GRENADE_MAX ? 'GRENADE — MAX' : `+1 GRENADE — ${COST_GRENADE}`,
+      cost: COST_GRENADE,
+      can: scrap >= COST_GRENADE && grenadeCount < GRENADE_MAX,
+      act: () => { scrap -= COST_GRENADE; grenadeCount++; sounds.pickup(); renderShop(); },
+    },
+    {
+      label: drones.count() >= DRONE_MAX
+        ? `DRONE — MAX (${drones.count()}/${DRONE_MAX})`
+        : `HELPER DRONE — ${COST_DRONE} (${drones.count()}/${DRONE_MAX})`,
+      cost: COST_DRONE,
+      can: scrap >= COST_DRONE && drones.count() < DRONE_MAX,
+      act: () => { scrap -= COST_DRONE; drones.add(); sounds.pickup(); addFeedLine('DRONE ONLINE'); renderShop(); },
+    },
+  ];
+  for (const item of items) {
+    const btn = document.createElement('button');
+    btn.className = 'shop-btn' + (item.can ? '' : ' disabled');
+    btn.textContent = item.label;
+    if (item.can) {
+      btn.onclick = () => {
+        if (!offerLocked()) item.act();
+      };
+    }
+    shopBar.appendChild(btn);
+  }
+}
+
+function showUpgradeOffer(bossReward) {
   waveState = 'upgrade';
   firing = false;
-  upgradeTitle.textContent = 'BOSS DOWN — CLAIM A WEAPON';
-  upgradeCards.innerHTML = '';
-  for (const id of WEAPON_ORDER) {
-    if (ownedWeapons.includes(id)) continue;
-    const w = WEAPONS[id];
-    makeCard({
-      label: 'WEAPON',
-      color: '#ff6b6b',
-      name: w.name,
-      desc: w.desc,
-      footer: `${w.mag} rounds · press ${WEAPON_ORDER.indexOf(id) + 1} or Q`,
-      onPick: () => pickWeapon(id),
-    });
-  }
+  pendingBossOffer = !!bossReward;
+  offerOpenedAt = performance.now();
+  upgradeTitle.textContent = bossReward ? 'BOSS DOWN — CLAIM YOUR REWARD' : 'CHOOSE AN UPGRADE';
+  renderOffer();
   upgradeScreen.classList.remove('hidden');
+  upgradeScreen.classList.add('locked');
+  setTimeout(() => upgradeScreen.classList.remove('locked'), 700);
   document.exitPointerLock();
 }
 
@@ -420,17 +463,6 @@ function pickUpgrade(upg) {
   syncStats();
   updateBuildStrip();
   addFeedLine(`${TIERS[upg.tier].label}: ${upg.name}`);
-  sounds.pickup();
-  upgradeScreen.classList.add('hidden');
-  canvas.requestPointerLock();
-  startWave(waveNum + 1);
-}
-
-function pickWeapon(id) {
-  ownedWeapons.push(id);
-  weaponAmmo[id] = magSize(WEAPONS[id]);
-  switchWeapon(id);
-  addFeedLine(`WEAPON: ${WEAPONS[id].name}`);
   sounds.pickup();
   upgradeScreen.classList.add('hidden');
   canvas.requestPointerLock();
@@ -447,9 +479,20 @@ function onWaveCleared() {
     return;
   }
   showPopup(`WAVE CLEARED +${bonus}`);
-  const weaponsLeft = WEAPON_ORDER.some((id) => !ownedWeapons.includes(id));
-  if (BOSS_WAVES.includes(waveNum) && weaponsLeft) showWeaponOffer();
-  else showUpgradeOffer();
+  showUpgradeOffer(BOSS_WAVES.includes(waveNum));
+}
+
+function runStatsHtml() {
+  const acc = run.shotsFired ? Math.round((run.shotsHit / run.shotsFired) * 100) : 0;
+  const kb = run.killsBy;
+  return `
+    <div class="stat-row"><span>ACCURACY</span><span>${acc}%</span></div>
+    <div class="stat-row"><span>DAMAGE DEALT</span><span>${Math.round(run.damageDealt).toLocaleString()}</span></div>
+    <div class="stat-row"><span>KILLS</span><span>rifle ${kb.rifle} · marksman ${kb.marksman} · grenade ${kb.grenade} · drone ${kb.drone}${kb.other ? ` · other ${kb.other}` : ''}</span></div>
+    <div class="stat-row"><span>HEADSHOT KILLS</span><span>${run.headshotKills}</span></div>
+    <div class="stat-row"><span>BEST COMBO</span><span>×${run.maxCombo}</span></div>
+    <div class="stat-row"><span>SCRAP EARNED</span><span>${run.scrapEarned}</span></div>
+    <div class="stat-row"><span>GRENADES THROWN</span><span>${run.grenadesThrown}</span></div>`;
 }
 
 function endGame(won) {
@@ -465,27 +508,21 @@ function endGame(won) {
   const best = loadBest();
   document.exitPointerLock();
   const buildSummary = [...owned.keys()].length
-    ? `build: ${[...owned.entries()].map(([id, n]) => {
+    ? [...owned.entries()].map(([id, n]) => {
         const u = UPGRADES.find((x) => x.id === id);
         return n > 1 ? `${u.name} ×${n}` : u.name;
-      }).join(' · ')}`
-    : '';
-  if (won) {
-    sounds.victory();
-    showOverlay(
-      'VICTORY',
-      `ALL ${FINAL_WAVE} WAVES CLEARED · SCORE ${score.toLocaleString()}`,
-      `${kills} kills · best score ${Math.max(best.score, score).toLocaleString()}<br />${buildSummary}`,
-      'CLICK TO PLAY AGAIN'
-    );
-  } else {
-    showOverlay(
-      'YOU DIED',
-      `WAVE ${waveNum} · SCORE ${score.toLocaleString()}`,
-      `${kills} kills · best score ${Math.max(best.score, score).toLocaleString()}<br />${buildSummary}`,
-      'CLICK TO RETRY'
-    );
-  }
+      }).join(' · ')
+    : 'no upgrades';
+  if (won) sounds.victory();
+  showOverlay(
+    won ? 'VICTORY' : 'YOU DIED',
+    won
+      ? `ALL ${FINAL_WAVE} WAVES CLEARED · SCORE ${score.toLocaleString()}`
+      : `WAVE ${waveNum} · SCORE ${score.toLocaleString()}`,
+    `${kills} kills · best score ${Math.max(best.score, score).toLocaleString()}<br />${buildSummary}`,
+    won ? 'CLICK TO PLAY AGAIN' : 'CLICK TO RETRY',
+    runStatsHtml()
+  );
 }
 
 // --- pointer lock ---
@@ -506,8 +543,8 @@ document.addEventListener('pointerlockchange', () => {
     firing = false;
     showOverlay(
       'PAUSED',
-      `WAVE ${waveNum} · SCORE ${score.toLocaleString()}`,
-      'WASD move &middot; SHIFT sprint &middot; SPACE jump &middot; G grenade<br />Q / 1-4 switch weapon &middot; R reload &middot; jump to dodge boss slams',
+      `WAVE ${waveNum} · SCORE ${score.toLocaleString()} · SCRAP ${scrap}`,
+      'WASD move &middot; SHIFT sprint &middot; SPACE jump &middot; G grenade<br />RIGHT-CLICK aim &middot; Q / 1-2 switch weapon &middot; R reload',
       'CLICK TO RESUME'
     );
   }
@@ -541,12 +578,10 @@ document.addEventListener('keydown', (e) => {
   if (e.code === 'KeyR') startReload();
   if (e.code === 'KeyG') throwGrenade();
   if (e.code === 'KeyQ') {
-    const idx = ownedWeapons.indexOf(currentWeaponId);
-    switchWeapon(ownedWeapons[(idx + 1) % ownedWeapons.length]);
+    switchWeapon(currentWeaponId === 'rifle' ? 'marksman' : 'rifle');
   }
-  if (/^Digit[1-4]$/.test(e.code)) {
-    const id = WEAPON_ORDER[Number(e.code.slice(5)) - 1];
-    if (id) switchWeapon(id);
+  if (/^Digit[1-2]$/.test(e.code)) {
+    switchWeapon(WEAPON_ORDER[Number(e.code.slice(5)) - 1]);
   }
 });
 document.addEventListener('keyup', (e) => {
@@ -559,7 +594,7 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// --- score ---
+// --- score / kills ---
 function addKill(bot, part) {
   kills++;
   let pts = bot.cfg.points;
@@ -567,6 +602,7 @@ function addKill(bot, part) {
   if (part === 'head') {
     pts *= 1.5;
     tags.push('HEADSHOT');
+    run.headshotKills++;
   }
   if (!player.onGround) {
     pts *= 2;
@@ -574,11 +610,19 @@ function addKill(bot, part) {
   }
   comboMult = comboTimer > 0 ? Math.min(stats.comboMax, comboMult + 1) : 1;
   comboTimer = 4;
+  run.maxCombo = Math.max(run.maxCombo, comboMult);
   const total = Math.round((pts * comboMult * stats.scoreMult) / 10) * 10;
   score += total;
   showPopup(`+${total}${tags.length ? ' ' + tags.join(' ') : ''}${comboMult > 1 ? ` ×${comboMult}` : ''}`);
   addFeedLine(`${bot.type.toUpperCase()} +${total}`);
   sounds.kill();
+
+  // multi-kill callouts
+  const now = performance.now();
+  killTimes.push(now);
+  while (killTimes.length && now - killTimes[0] > 1300) killTimes.shift();
+  if (killTimes.length >= 2) showCallout(killTimes.length);
+
   if (bot.cfg.boss) {
     addShake(1.5);
     showBanner(`${bot.cfg.name} DOWN`);
@@ -609,27 +653,27 @@ function shotDamage(part, dist, bot) {
   const w = weapon();
   let dmg = part === 'head' ? w.head * stats.headshotMult : w.body;
   dmg *= stats.damageMult;
-  if (w.falloffStart && dist > w.falloffStart) {
-    const t = (dist - w.falloffStart) / (w.falloffEnd - w.falloffStart);
-    dmg *= Math.max(w.falloffMin, 1 - t * (1 - w.falloffMin));
-  }
   if (dist > LONGSHOT_DIST) dmg *= stats.longshotMult;
   if (bot && bot.health < bot.maxHealth * 0.3) dmg *= stats.executionerMult;
   if (bot && bot.cfg.boss) dmg *= stats.bossSlayer;
   if (berserkActive()) dmg *= 1.5;
-  if (player.position.y - 1.7 > 0.9) dmg *= stats.highGround; // elevated
+  if (player.position.y - 1.7 > 0.9) dmg *= stats.highGround;
   return Math.round(dmg);
 }
 
-// central damage funnel so pierce/splash/grenade/chain kills all behave the same
-function dealDamage(bot, dmg, part, depth = 0) {
+// central damage funnel — pierce/splash/grenade/drone/chain kills all flow here
+function dealDamage(bot, dmg, part, opts = {}) {
+  const { source = currentWeaponId, depth = 0 } = opts;
   const wasBoss = bot.cfg.boss;
   const pos = bot.group.position.clone();
+  run.damageDealt += dmg;
   const died = bots.damage(bot, dmg);
   if (died) {
+    const bucket = run.killsBy[source] !== undefined ? source : 'other';
+    run.killsBy[bucket]++;
     addKill(bot, part);
     if (stats.killHeal) {
-      player.health = Math.min(player.maxHealth, player.health + stats.killHeal);
+      player.health = Math.min(healCap(), player.health + stats.killHeal);
     }
     if (stats.killAmmo) setAmmo(Math.min(magSize(), ammo() + stats.killAmmo));
     if (stats.adrenaline) adrenTimer = 3;
@@ -642,14 +686,19 @@ function dealDamage(bot, dmg, part, depth = 0) {
         sounds.reload();
       }
     }
-    // grenade drops: bosses always drop 2, everyone else rolls the dice
+    // drops: bosses pay out big, everyone else rolls the dice
     if (wasBoss) {
-      grenades.spawnPickup(pos);
-      grenades.spawnPickup({ x: pos.x + 1.5, z: pos.z + 1.5 });
-    } else if (Math.random() < GRENADE_DROP_CHANCE) {
-      grenades.spawnPickup(pos);
+      grenades.spawnPickup(pos, 'grenade');
+      grenades.spawnPickup(pos, 'grenade');
+      grenades.spawnPickup(pos, 'scrap', SCRAP_BOSS);
+    } else {
+      if (Math.random() < GRENADE_DROP_CHANCE * stats.grenadeDropMult) {
+        grenades.spawnPickup(pos, 'grenade');
+      }
+      if (Math.random() < SCRAP_DROP_CHANCE) {
+        grenades.spawnPickup(pos, 'scrap', SCRAP_VALUES[bot.type] || 10);
+      }
     }
-    // chain lightning arcs once per original kill
     if (stats.chainLightning && depth === 0) {
       let best = null;
       let bestD = 8;
@@ -668,7 +717,7 @@ function dealDamage(bot, dmg, part, depth = 0) {
         to.y += 1 * best.cfg.scale;
         effects.tracer(from, to, 0x66ddff);
         effects.spark(to, 0x66ddff);
-        dealDamage(best, 40, 'body', 1);
+        dealDamage(best, 40, 'body', { source: 'other', depth: 1 });
       }
     }
   }
@@ -710,12 +759,13 @@ function tryShoot() {
     startReload();
     return;
   }
-  fireCooldown = w.interval / stats.fireRateMult;
+  fireCooldown = w.interval / fireRateMult();
   shotCounter++;
   const freeShot = stats.doubleTap && shotCounter % 4 === 0;
   if (!freeShot) setAmmo(ammo() - 1);
   gunKick = 1;
   sounds[w.sound]();
+  run.shotsFired++;
 
   camera.updateMatrixWorld(true);
   camera.getWorldPosition(_origin);
@@ -729,11 +779,10 @@ function tryShoot() {
   let firstEnd = null;
   for (let p = 0; p < w.pellets; p++) {
     _pelletDir.copy(_dir);
-    const spread = w.spread;
-    if (spread) {
-      _pelletDir.x += (Math.random() - 0.5) * 2 * spread;
-      _pelletDir.y += (Math.random() - 0.5) * 2 * spread;
-      _pelletDir.z += (Math.random() - 0.5) * 2 * spread;
+    if (w.spread) {
+      _pelletDir.x += (Math.random() - 0.5) * 2 * w.spread;
+      _pelletDir.y += (Math.random() - 0.5) * 2 * w.spread;
+      _pelletDir.z += (Math.random() - 0.5) * 2 * w.spread;
       _pelletDir.normalize();
     }
     const { struck, end } = fireRay(_pelletDir, seenAll);
@@ -742,7 +791,27 @@ function tryShoot() {
       anyHit = true;
       for (const s of struck) {
         effects.spark(s.point, 0xff5555);
-        dealDamage(s.bot, shotDamage(s.part, s.dist, s.bot), s.part);
+        const dmg = shotDamage(s.part, s.dist, s.bot);
+        dealDamage(s.bot, dmg, s.part);
+        // ricochet: bounce a fraction to the nearest other enemy
+        if (stats.ricochet) {
+          let best = null;
+          let bestD = 10;
+          for (const b of bots.bots) {
+            if (!b.alive || seenAll.has(b)) continue;
+            const d = b.group.position.distanceTo(s.bot.group.position);
+            if (d < bestD) {
+              bestD = d;
+              best = b;
+            }
+          }
+          if (best) {
+            _botCenter.copy(best.group.position);
+            _botCenter.y += 0.9 * best.cfg.scale;
+            effects.tracer(s.point, _botCenter, 0xffe08a);
+            dealDamage(best, Math.round(dmg * 0.6), 'body', { source: 'other', depth: 1 });
+          }
+        }
       }
     } else {
       effects.spark(end, 0xccc9a8);
@@ -752,9 +821,9 @@ function tryShoot() {
   if (anyHit) {
     hitmarkerTimer = 0.12;
     sounds.hit();
+    run.shotsHit++;
   }
 
-  // explosive rounds: one splash per trigger pull, at the first pellet's impact
   if (stats.explosive && firstEnd) {
     effects.explosion(firstEnd, 0xff8833, 0.6);
     addShake(0.12);
@@ -763,7 +832,9 @@ function tryShoot() {
       if (!b.alive || seenAll.has(b)) continue;
       _botCenter.copy(b.group.position);
       _botCenter.y += 0.9 * b.cfg.scale;
-      if (_botCenter.distanceTo(firstEnd) < 3) dealDamage(b, splash, 'body');
+      if (_botCenter.distanceTo(firstEnd) < 3) {
+        dealDamage(b, splash, 'body', { source: 'other', depth: 1 });
+      }
     }
   }
 
@@ -776,25 +847,29 @@ function throwGrenade() {
   if (grenadeCount <= 0 || grenadeCd > 0 || waveState === 'upgrade') return;
   grenadeCount--;
   grenadeCd = 0.5;
+  run.grenadesThrown++;
   grenades.throwFrom(camera);
   sounds.empty();
 }
 
-function explodeGrenade(pos) {
-  effects.explosion(pos, 0xffaa22, 1.8);
-  effects.shockwave(pos, GRENADE_RADIUS, 0xffaa44);
-  addShake(0.9);
+function explodeGrenade(pos, isCluster) {
+  const radius = isCluster ? 4 : GRENADE_RADIUS;
+  const baseDmg = (isCluster ? 60 : 120) * stats.grenadeDmgMult;
+  effects.explosion(pos, 0xffaa22, isCluster ? 1 : 1.8);
+  effects.shockwave(pos, radius, 0xffaa44);
+  addShake(isCluster ? 0.4 : 0.9);
   sounds.explosionBig();
   for (const b of bots.bots) {
     if (!b.alive) continue;
     _botCenter.copy(b.group.position);
     _botCenter.y += 0.9 * b.cfg.scale;
     const d = _botCenter.distanceTo(pos);
-    if (d < GRENADE_RADIUS) {
-      const dmg = Math.round(120 * (1 - (0.6 * d) / GRENADE_RADIUS));
-      dealDamage(b, dmg, 'body');
+    if (d < radius) {
+      const dmg = Math.round(baseDmg * (1 - (0.6 * d) / radius));
+      dealDamage(b, dmg, 'body', { source: 'grenade' });
     }
   }
+  if (!isCluster && stats.clusterBombs) grenades.spawnCluster(pos);
 }
 
 // --- bot damage callbacks ---
@@ -810,12 +885,13 @@ bots.onPlayerHit = (dmg, kind, sourceBot) => {
     return;
   }
   if (kind === 'melee' && stats.thorns && sourceBot) {
-    dealDamage(sourceBot, stats.thorns, 'body');
+    dealDamage(sourceBot, stats.thorns, 'body', { source: 'other', depth: 1 });
   }
   const final = Math.max(1, Math.round(dmg * (1 - stats.damageReduction)));
   vignetteAlpha = 0.85;
   addShake(kind === 'shock' ? 1.3 : kind === 'melee' ? 0.7 : 0.35 + final / 60);
   sounds.hurt();
+  if (stats.adrenalSurge) surgeTimer = 3;
   const dead = player.takeDamage(final);
   if (dead) {
     if (stats.secondWind && !secondWindUsed) {
@@ -865,13 +941,11 @@ function updateGun(dt) {
   }
   gun.rotation.x = gunKick * 0.14;
 
-  // scoped weapons hide the viewmodel and show the scope overlay instead
   const scoped = w.scope && adsT > 0.5;
   gun.visible = !scoped;
   scopeOverlay.style.opacity = w.scope ? `${Math.max(0, (adsT - 0.5) * 2)}` : '0';
   crosshair.style.opacity = scoped ? '0' : '1';
 
-  // zoom: lerp FOV toward the weapon's ADS FOV, scale mouse sensitivity with it
   const targetFov = BASE_FOV + ((w.zoomFov ?? BASE_FOV) - BASE_FOV) * adsT;
   fovCurrent += (targetFov - fovCurrent) * Math.min(1, dt * 14);
   player.lookScale = Math.max(0.2, fovCurrent / BASE_FOV);
@@ -879,15 +953,19 @@ function updateGun(dt) {
 
 // --- HUD ---
 function updateHUD(dt) {
-  hudHealth.style.width = `${(player.health / player.maxHealth) * 100}%`;
+  const hpFrac = player.health / player.maxHealth;
+  hudHealth.style.width = `${Math.min(100, hpFrac * 100)}%`;
   hudHealth.style.background =
-    player.health > player.maxHealth * 0.4
-      ? 'linear-gradient(90deg, #37d67a, #7ce7a5)'
-      : 'linear-gradient(90deg, #d63737, #e77c7c)';
+    hpFrac > 1.001
+      ? 'linear-gradient(90deg, #38bdf8, #7fe7ff)'
+      : hpFrac > 0.4
+        ? 'linear-gradient(90deg, #37d67a, #7ce7a5)'
+        : 'linear-gradient(90deg, #d63737, #e77c7c)';
   hudAmmo.textContent = reloading ? '···' : `${ammo()}`;
   hudWeaponLabel.textContent = `${weapon().name} · R RELOAD`;
   hudGrenades.textContent = `GRENADES ×${grenadeCount} · G THROW`;
   hudScore.textContent = score.toLocaleString();
+  hudScrap.textContent = `SCRAP ${scrap}`;
   hudMult.textContent = `×${comboMult}`;
   hudMult.className = comboMult > 1 ? `hot hot-${Math.min(comboMult, 5)}` : '';
   hudComboBar.style.width = `${(comboTimer / 4) * 100}%`;
@@ -922,16 +1000,17 @@ function updateHUD(dt) {
 
 // debug/testing handle
 window.__game = {
-  player, bots, camera, grenades,
+  player, bots, camera, grenades, drones,
   get stats_() { return stats; },
   owned,
   stats: () => ({
-    state, waveState, wave: waveNum, score, mult: comboMult, kills,
+    state, waveState, wave: waveNum, score, scrap, mult: comboMult, kills,
     ammo: ammo(), mag: magSize(), weapon: currentWeaponId,
-    weapons: [...ownedWeapons], grenades: grenadeCount,
+    grenades: grenadeCount, droneCount: drones.count(),
     health: player.health, maxHealth: player.maxHealth,
     enemies: bots.aliveCount(),
   }),
+  run: () => ({ ...run }),
   debug: {
     winWave() {
       bots.spawnQueue = [];
@@ -946,14 +1025,12 @@ window.__game = {
       updateBuildStrip();
       return true;
     },
-    giveWeapon(id) {
-      if (!WEAPONS[id] || ownedWeapons.includes(id)) return false;
-      ownedWeapons.push(id);
-      weaponAmmo[id] = magSize(WEAPONS[id]);
-      return true;
-    },
+    scrap(n) { scrap = n; },
     grenades(n) { grenadeCount = n; },
-    roll: (w) => rollOffer(w ?? waveNum, ownedUniqueIds(), stats.offerSize).map((u) => ({ id: u.id, tier: u.tier })),
+    addDrone() { return drones.add(); },
+    roll: (w, boss) =>
+      rollOffer(w ?? waveNum, ownedUniqueIds(), stats.offerSize, !!boss)
+        .map((u) => ({ id: u.id, tier: u.tier })),
   },
 };
 
@@ -964,13 +1041,14 @@ renderer.setAnimationLoop(() => {
 
   if (state === 'playing') {
     adrenTimer = Math.max(0, adrenTimer - dt);
+    surgeTimer = Math.max(0, surgeTimer - dt);
     invulnTimer = Math.max(0, invulnTimer - dt);
     grenadeCd = Math.max(0, grenadeCd - dt);
     player.dynamicSpeedMult =
       stats.speedMult *
       (adrenTimer > 0 ? 1 + 0.25 * stats.adrenaline : 1) *
       (berserkActive() ? 1.25 : 1) *
-      (1 - adsT * 0.4); // aiming slows you down
+      (1 - adsT * 0.4);
 
     player.update(dt, world.obstacleBoxes);
 
@@ -989,7 +1067,13 @@ renderer.setAnimationLoop(() => {
       dt,
       player.position,
       world.obstacleBoxes,
-      () => {
+      (type, value) => {
+        if (type === 'scrap') {
+          scrap += value;
+          run.scrapEarned += value;
+          sounds.scrap();
+          return true;
+        }
         if (grenadeCount >= GRENADE_MAX) return false;
         grenadeCount++;
         addFeedLine('GRENADE +1');
@@ -998,6 +1082,10 @@ renderer.setAnimationLoop(() => {
       },
       explodeGrenade
     );
+
+    if (waveState === 'active') {
+      drones.update(dt, player, bots.bots, dealDamage);
+    }
 
     fireCooldown -= dt;
     comboTimer = Math.max(0, comboTimer - dt);
@@ -1012,7 +1100,6 @@ renderer.setAnimationLoop(() => {
     if (firing && waveState !== 'upgrade') tryShoot();
     updateGun(dt);
 
-    // footsteps
     if (player.onGround && player.horizontalSpeed() > 1.5) {
       stepAcc += dt * player.horizontalSpeed();
       if (stepAcc > 3.2) {
@@ -1021,7 +1108,6 @@ renderer.setAnimationLoop(() => {
       }
     }
 
-    // low-health heartbeat
     if (player.health < player.maxHealth * 0.35 && player.health > 0) {
       heartbeatTimer -= dt;
       if (heartbeatTimer <= 0) {
@@ -1045,7 +1131,6 @@ renderer.setAnimationLoop(() => {
   renderer.render(scene, camera);
 });
 
-// initial weapon visible + menu shows your best run
 viewmodels.rifle.visible = true;
 {
   const best = loadBest();

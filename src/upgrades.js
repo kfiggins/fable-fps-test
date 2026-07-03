@@ -57,6 +57,13 @@ export function createStats() {
     chainLightning: false, // kills arc damage to a nearby enemy
     instantReload: false,
     offerSize: 3, // upgrade cards per offer
+    adrenalSurge: 0, // stacks: taking damage grants +30%/stack fire rate 3s
+    overshield: false, // kill heals overfill to 130% max health
+    grenadeDmgMult: 1,
+    grenadeDropMult: 1,
+    enemySlow: 1, // Time Dilation: global enemy speed multiplier
+    ricochet: false, // hits bounce 60% damage to a nearby enemy
+    clusterBombs: false, // grenades split into bomblets
   };
 }
 
@@ -126,6 +133,12 @@ export const UPGRADES = [
     apply: (s) => { s.bossSlayer *= 1.3; } },
   { id: 'quartermaster', tier: 'rare', name: 'Quartermaster', desc: 'Upgrade offers show 4 choices', unique: true,
     apply: (s) => { s.offerSize = 4; } },
+  { id: 'adrenalsurge', tier: 'rare', name: 'Adrenal Surge', desc: 'Taking damage grants +30% fire rate for 3s',
+    apply: (s) => { s.adrenalSurge += 1; } },
+  { id: 'overshield', tier: 'rare', name: 'Overshield', desc: 'Kill heals can overfill health to 130%', unique: true,
+    apply: (s) => { s.overshield = true; } },
+  { id: 'grenadier', tier: 'rare', name: 'Grenadier', desc: 'Grenades +50% damage, drops twice as common',
+    apply: (s) => { s.grenadeDmgMult *= 1.5; s.grenadeDropMult *= 2; } },
 
   // ---- legendary ----
   { id: 'pierce', tier: 'legendary', name: 'Piercing Rounds', desc: 'Bullets pass through enemies', unique: true,
@@ -144,14 +157,23 @@ export const UPGRADES = [
     apply: (s) => { s.chainLightning = true; } },
   { id: 'gunslinger', tier: 'legendary', name: 'Gunslinger', desc: 'Reloads are instant', unique: true,
     apply: (s) => { s.instantReload = true; } },
+  { id: 'timedilation', tier: 'legendary', name: 'Time Dilation', desc: 'All enemies move 15% slower', unique: true,
+    apply: (s) => { s.enemySlow = 0.85; } },
+  { id: 'ricochet', tier: 'legendary', name: 'Ricochet', desc: 'Hits bounce to a nearby enemy for 60% damage', unique: true,
+    apply: (s) => { s.ricochet = true; } },
+  { id: 'juggernaut', tier: 'legendary', name: 'Juggernaut', desc: '+100 max health, −15% move speed', unique: true,
+    apply: (s) => { s.maxHealthBonus += 100; s.speedMult *= 0.85; } },
+  { id: 'clusterbombs', tier: 'legendary', name: 'Cluster Bombs', desc: 'Grenades split into 3 bomblets', unique: true,
+    apply: (s) => { s.clusterBombs = true; } },
 ];
 
 const TIER_ORDER = ['common', 'uncommon', 'rare', 'legendary'];
 
 // Each card rolls its tier independently, no duplicate upgrades in one
 // offer, owned uniques never reappear. If a tier's pool is empty the
-// card falls to the nearest tier that still has options.
-export function rollOffer(wave, ownedUniques, count = 3) {
+// card falls to the nearest tier that still has options. Boss rewards
+// pass guaranteeLegendary to force the first card gold.
+export function rollOffer(wave, ownedUniques, count = 3, guaranteeLegendary = false) {
   const weights = tierWeights(wave);
   const picks = [];
   const pickedIds = new Set();
@@ -160,7 +182,16 @@ export function rollOffer(wave, ownedUniques, count = 3) {
       (u) => u.tier === tier && !pickedIds.has(u.id) && !(u.unique && ownedUniques.has(u.id))
     );
 
-  for (let i = 0; i < count; i++) {
+  if (guaranteeLegendary) {
+    const pool = available('legendary').length ? available('legendary') : available('rare');
+    if (pool.length) {
+      const u = pool[Math.floor(Math.random() * pool.length)];
+      picks.push(u);
+      pickedIds.add(u.id);
+    }
+  }
+
+  for (let i = picks.length; i < count; i++) {
     const total = TIER_ORDER.reduce((sum, t) => sum + weights[t], 0);
     let r = Math.random() * total;
     let tier = 'common';

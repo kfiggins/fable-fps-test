@@ -1,15 +1,12 @@
 import * as THREE from 'three';
-import { collideXZ, clampToArena } from './world.js';
+import { collideXZ, groundHeight, clampToArena } from './world.js';
 
 // Type design: big pro ↔ big con.
 //  grunt  — balanced skirmisher; hunts cover when hurt
 //  rusher — very fast, small target, brutal melee ↔ dies to a single body shot, no gun
 //  tank   — huge HP pool, heavy hits ↔ crawls, giant hitbox, slow fire
 //  sniper — long-range laser-telegraphed shots that HURT ↔ one-shot fragile, flees up close
-//  warden   — wave-5 boss: burst cannon, ground slam (jump to dodge!), summons rushers
-//  titan    — wave-10 boss: everything the warden has, bigger, plus an aimed cannon shot
-//  butcher  — wave-15 boss: FAST melee monster that enrages at low health
-//  overlord — wave-20 boss: the full kit, huge, enrages — the final exam
+//  warden/titan/butcher/overlord — bosses (waves 5/10/15/20)
 export const BOT_TYPES = {
   grunt: {
     hp: 100, speed: 4.4, scale: 1, points: 100, color: 0x3a4160, visor: 0xff2b2b,
@@ -68,6 +65,8 @@ export const BOT_TYPES = {
 
 const SHOOT_RANGE = 55;
 const PLAYER_HIT_RADIUS = 0.5;
+const GRAVITY = 26;
+const STEP_HEIGHT = 0.55;
 
 const _toPlayer = new THREE.Vector3();
 const _muzzle = new THREE.Vector3();
@@ -140,6 +139,7 @@ class Bot {
     this.time = Math.random() * 10;
     this.hitFlash = 0;
     this.meleePulse = 0;
+    this.vy = 0;
 
     this.strafeDir = Math.random() < 0.5 ? -1 : 1;
     this.strafeTimer = 1 + Math.random() * 2;
@@ -148,8 +148,14 @@ class Bot {
     this.coverWait = 0;
     this.coverCooldown = 0;
 
+    this.routeKey = null;
+    this.routeProgress = 0;
+    this.stuckTimer = 0;
+    this.lastRouteX = null;
+    this.lastRouteZ = null;
+
     this.hasLOS = false;
-    this.losTimer = 0;
+    this.losTimer = Math.random() * 0.25;
     this.noLOSTime = 0;
 
     this.shootTimer = 1.2 + Math.random() * 1.2;
@@ -157,7 +163,7 @@ class Bot {
     this.burstGap = 0;
     this.meleeTimer = 0;
 
-    this.aimState = null; // { t, lockedPos } — sniper/titan telegraphed shot
+    this.aimState = null;
     this.laser = null;
     this.shockTimer = 2;
     this.summonTimer = 6;
@@ -173,17 +179,18 @@ export class BotManager {
     this.boxes = world.obstacleBoxes;
     this.spawnPoints = world.spawnPoints;
     this.coverSpots = world.coverSpots;
+    this.routeFor = world.routeFor;
     this.raycaster = new THREE.Raycaster();
-    this.onPlayerHit = null; // set by main: (damage, kind) => {}
-    this.onBossEnraged = null; // set by main: (bot) => {}
+    this.onPlayerHit = null; // (damage, kind, sourceBot) => {}
+    this.onBossEnraged = null;
     this.bots = [];
     this.spawnQueue = [];
     this.spawnDelay = 0;
     this.boss = null;
     this.waveNum = 1;
+    this.speedScale = 1; // Time Dilation upgrade
   }
 
-  // regular enemies toughen up and hit harder as the waves climb
   hpMult() {
     return 1 + (this.waveNum - 1) * 0.04;
   }
@@ -295,7 +302,6 @@ export class BotManager {
       const wasBoss = bot.cfg.boss;
       this.destroy(bot);
       if (wasBoss) {
-        // boss down — every remaining enemy dies with it (no points)
         for (const b of this.bots) {
           if (b.alive) this.destroy(b);
         }
@@ -356,7 +362,6 @@ export class BotManager {
     if (dist > 0.01) _toPlayer.divideScalar(dist);
     bot.group.rotation.y = Math.atan2(_toPlayer.x, _toPlayer.z);
 
-    // periodic line-of-sight check (cheap, cached)
     bot.losTimer -= dt;
     if (bot.losTimer <= 0) {
       bot.losTimer = 0.25;
@@ -374,69 +379,118 @@ export class BotManager {
     let moveX = 0;
     let moveZ = 0;
     let speedMult = 1;
+    let routing = false;
 
-    if (bot.state === 'cover') {
-      // low-HP grunt hiding behind a block
-      const ct = bot.coverTarget;
-      const cdx = ct.x - pos.x;
-      const cdz = ct.z - pos.z;
-      const cdist = Math.hypot(cdx, cdz);
-      if (cdist > 1) {
-        moveX = cdx / cdist;
-        moveZ = cdz / cdist;
-        speedMult = 1.3;
-      } else {
-        bot.coverWait -= dt;
-        bot.health = Math.min(bot.maxHealth, bot.health + 10 * dt); // patching up
-      }
-      if (bot.coverWait <= 0 || dist < 7) {
-        bot.state = 'engage';
-        bot.coverCooldown = 9;
-      }
-    } else if (cfg.ai === 'rush') {
-      moveX = _toPlayer.x;
-      moveZ = _toPlayer.z;
-      // heavy zigzag — hard to hit
-      moveX += -_toPlayer.z * bot.strafeDir * 0.8;
-      moveZ += _toPlayer.x * bot.strafeDir * 0.8;
-      if (dist < 6) speedMult = 1.35; // closing lunge
-    } else if (cfg.ai === 'sniper') {
-      if (dist < 14) {
-        moveX = -_toPlayer.x;
-        moveZ = -_toPlayer.z;
-        speedMult = 1.6; // panic backpedal
-      } else if (dist > 45) {
-        moveX = _toPlayer.x;
-        moveZ = _toPlayer.z;
-      } else if (!bot.aimState) {
-        moveX = -_toPlayer.z * bot.strafeDir * 0.5;
-        moveZ = _toPlayer.x * bot.strafeDir * 0.5;
-      }
-      // holds still while aiming
-    } else {
-      // skirmish (grunt, tank, bosses)
-      const [near, far] = cfg.range;
-      if (!bot.hasLOS && bot.noLOSTime > 1.5) {
-        moveX = _toPlayer.x;
-        moveZ = _toPlayer.z;
-      } else {
-        if (dist > far) {
-          moveX = _toPlayer.x;
-          moveZ = _toPlayer.z;
-        } else if (dist < near) {
-          moveX = -_toPlayer.x;
-          moveZ = -_toPlayer.z;
+    // structure routing: ground chasers follow waypoints up stairs.
+    // A waypoint only counts as reached when the bot matches its HEIGHT too —
+    // otherwise bots cut corners beside staircases and pin against step sides.
+    const atWaypoint = (w, r) =>
+      Math.hypot(pos.x - w.x, pos.z - w.z) < r && Math.abs(pos.y - w.y) < 0.7;
+    const canRoute = (cfg.ai === 'skirmish' && !cfg.boss) || cfg.ai === 'rush';
+    if (canRoute && bot.state !== 'cover') {
+      const route = this.routeFor(pos, playerPos);
+      if (route) {
+        if (bot.routeKey !== route.key) {
+          bot.routeKey = route.key;
+          bot.routeProgress = 0;
+          bot.stuckTimer = 0;
+          for (let i = route.points.length - 1; i >= 0; i--) {
+            if (atWaypoint(route.points[i], 1.2)) {
+              bot.routeProgress = i + 1;
+              break;
+            }
+          }
         }
+        const pts = route.points;
+        if (bot.routeProgress < pts.length && atWaypoint(pts[bot.routeProgress], 0.9)) {
+          bot.routeProgress++;
+          bot.stuckTimer = 0;
+        }
+        if (bot.routeProgress < pts.length) {
+          const w = pts[bot.routeProgress];
+          const dx = w.x - pos.x;
+          const dz = w.z - pos.z;
+          const l = Math.hypot(dx, dz) || 1;
+          moveX = dx / l;
+          moveZ = dz / l;
+          speedMult = 1.15;
+          routing = true;
+          // pinned against geometry? restart the route from its first waypoint
+          const movedSq =
+            (pos.x - (bot.lastRouteX ?? pos.x)) ** 2 + (pos.z - (bot.lastRouteZ ?? pos.z)) ** 2;
+          if (movedSq < (0.5 * cfg.speed * dt) ** 2) bot.stuckTimer += dt;
+          else bot.stuckTimer = 0;
+          bot.lastRouteX = pos.x;
+          bot.lastRouteZ = pos.z;
+          if (bot.stuckTimer > 1.5) {
+            bot.routeProgress = 0;
+            bot.stuckTimer = 0;
+          }
+        }
+      } else {
+        bot.routeKey = null;
+      }
+    }
+
+    if (!routing) {
+      if (bot.state === 'cover') {
+        const ct = bot.coverTarget;
+        const cdx = ct.x - pos.x;
+        const cdz = ct.z - pos.z;
+        const cdist = Math.hypot(cdx, cdz);
+        if (cdist > 1) {
+          moveX = cdx / cdist;
+          moveZ = cdz / cdist;
+          speedMult = 1.3;
+        } else {
+          bot.coverWait -= dt;
+          bot.health = Math.min(bot.maxHealth, bot.health + 10 * dt);
+        }
+        if (bot.coverWait <= 0 || dist < 7) {
+          bot.state = 'engage';
+          bot.coverCooldown = 9;
+        }
+      } else if (cfg.ai === 'rush') {
+        moveX = _toPlayer.x;
+        moveZ = _toPlayer.z;
         moveX += -_toPlayer.z * bot.strafeDir * 0.8;
         moveZ += _toPlayer.x * bot.strafeDir * 0.8;
-      }
-      // hurt grunt looks for cover
-      if (
-        cfg.usesCover && bot.state === 'engage' && bot.health < 40 &&
-        bot.coverCooldown <= 0 && this.findCover(bot, playerPos)
-      ) {
-        bot.state = 'cover';
-        bot.coverWait = 2.5;
+        if (dist < 6) speedMult = 1.35;
+      } else if (cfg.ai === 'sniper') {
+        if (dist < 14) {
+          moveX = -_toPlayer.x;
+          moveZ = -_toPlayer.z;
+          speedMult = 1.6;
+        } else if (dist > 45) {
+          moveX = _toPlayer.x;
+          moveZ = _toPlayer.z;
+        } else if (!bot.aimState) {
+          moveX = -_toPlayer.z * bot.strafeDir * 0.5;
+          moveZ = _toPlayer.x * bot.strafeDir * 0.5;
+        }
+      } else {
+        const [near, far] = cfg.range;
+        if (!bot.hasLOS && bot.noLOSTime > 1.5) {
+          moveX = _toPlayer.x;
+          moveZ = _toPlayer.z;
+        } else {
+          if (dist > far) {
+            moveX = _toPlayer.x;
+            moveZ = _toPlayer.z;
+          } else if (dist < near) {
+            moveX = -_toPlayer.x;
+            moveZ = -_toPlayer.z;
+          }
+          moveX += -_toPlayer.z * bot.strafeDir * 0.8;
+          moveZ += _toPlayer.x * bot.strafeDir * 0.8;
+        }
+        if (
+          cfg.usesCover && bot.state === 'engage' && bot.health < 40 &&
+          bot.coverCooldown <= 0 && this.findCover(bot, playerPos)
+        ) {
+          bot.state = 'cover';
+          bot.coverWait = 2.5;
+        }
       }
     }
     bot.coverCooldown -= dt;
@@ -444,11 +498,24 @@ export class BotManager {
     if (bot.enraged) speedMult *= cfg.enrage.speed;
     const len = Math.hypot(moveX, moveZ);
     if (len > 0.01) {
-      pos.x += (moveX / len) * cfg.speed * speedMult * dt;
-      pos.z += (moveZ / len) * cfg.speed * speedMult * dt;
+      const sp = cfg.speed * speedMult * this.speedScale * dt;
+      pos.x += (moveX / len) * sp;
+      pos.z += (moveZ / len) * sp;
     }
     clampToArena(pos, bot.radius);
-    collideXZ(pos, bot.radius, pos.y + 0.05, pos.y + 1.8 * cfg.scale, this.boxes);
+    collideXZ(pos, bot.radius, pos.y, pos.y + 1.8 * cfg.scale, this.boxes, STEP_HEIGHT);
+
+    // --- vertical physics: gravity, stairs, landing (feet = pos.y) ---
+    bot.vy -= GRAVITY * dt;
+    pos.y += bot.vy * dt;
+    const support = groundHeight(pos, bot.radius * 0.6, pos.y, this.boxes, STEP_HEIGHT);
+    if (pos.y < support - 0.001 && bot.vy <= 0.01) {
+      pos.y = Math.min(support, pos.y + 10 * dt);
+      bot.vy = 0;
+    } else if (bot.vy <= 0 && pos.y <= support + 0.05) {
+      pos.y = support;
+      bot.vy = 0;
+    }
 
     // --- attacks ---
     if (bot.state === 'cover') return;
@@ -467,13 +534,13 @@ export class BotManager {
 
     if (cfg.shock) {
       bot.shockTimer -= dt;
-      if (bot.shockTimer <= 0 && dist < cfg.shock.trigger) {
+      const vertGap = Math.abs(playerPos.y - 1.7 - pos.y);
+      if (bot.shockTimer <= 0 && dist < cfg.shock.trigger && vertGap < 2) {
         bot.shockTimer = cfg.shock.cd;
         this.effects.shockwave(pos, cfg.shock.radius);
         this.sounds.shockwave();
-        // jump to dodge — only hits a grounded player
-        if (player.onGround && dist < cfg.shock.radius && this.onPlayerHit) {
-          this.onPlayerHit(cfg.shock.dmg, 'shock');
+        if (player.onGround && dist < cfg.shock.radius && vertGap < 2 && this.onPlayerHit) {
+          this.onPlayerHit(cfg.shock.dmg, 'shock', bot);
         }
       }
     }
@@ -530,7 +597,6 @@ export class BotManager {
     let best = null;
     let bestD = 30;
     for (const spot of this.coverSpots) {
-      // the block must sit between the player and the spot
       _v.copy(spot.blockCenter).sub(playerPos);
       const behind =
         (spot.point.x - spot.blockCenter.x) * _v.x + (spot.point.z - spot.blockCenter.z) * _v.z;
@@ -545,7 +611,6 @@ export class BotManager {
     return !!best;
   }
 
-  // sniper / titan cannon: laser tracks the player, locks (turns red), fires
   updateAimedShot(bot, dt, player, dist) {
     const cfg = bot.cfg.aimed;
     if (!bot.aimState) {
@@ -563,7 +628,6 @@ export class BotManager {
     st.t += dt;
     st.lostTime = bot.hasLOS ? 0 : st.lostTime + dt;
     if (st.lostTime > 0.4) {
-      // target broke line of sight — abort
       bot.aimState = null;
       this.clearLaser(bot);
       return;
@@ -574,7 +638,7 @@ export class BotManager {
 
     const lockAt = cfg.telegraph - cfg.lockTime;
     if (st.t >= lockAt && !st.lockedPos) {
-      st.lockedPos = player.position.clone(); // aim locked — MOVE!
+      st.lockedPos = player.position.clone();
     }
     const target = st.lockedPos || player.position;
 
@@ -629,7 +693,6 @@ export class BotManager {
     this.resolveShot(bot, player, dmg, burst.heavy ? 0xffa030 : 0xff7a5c, false, burst.heavy);
   }
 
-  // shared hitscan: _muzzle and _aim must be set
   resolveShot(bot, player, dmg, tracerColor, isAimed, isHeavy) {
     this.raycaster.set(_muzzle, _aim);
     this.raycaster.far = 90;
@@ -653,7 +716,7 @@ export class BotManager {
     if (playerHit) {
       _end.copy(player.position);
       _end.y -= 0.35;
-      if (this.onPlayerHit) this.onPlayerHit(dmg, isAimed ? 'sniper' : 'shot');
+      if (this.onPlayerHit) this.onPlayerHit(dmg, isAimed ? 'sniper' : 'shot', bot);
     } else if (occDist < Infinity) {
       _end.copy(occ[0].point);
       this.effects.spark(_end, 0xffaa66);
