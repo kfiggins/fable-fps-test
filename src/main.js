@@ -16,7 +16,7 @@ const GRENADE_DROP_CHANCE = 0.08;
 const SCRAP_DROP_CHANCE = 0.45;
 const GRENADE_MAX = 5;
 const GRENADE_RADIUS = 6;
-const BOSS_WAVES = [5, 10, 15];
+const BOSS_WAVES = [5, 10, 15, 20, 25];
 const COST_REROLL = 75;
 const COST_GRENADE = 30;
 const COST_DRONE = 125;
@@ -53,6 +53,16 @@ const WAVES = [
   mix(8, 9, 6, 5),
   mix(9, 10, 6, 6),
   ['overlord', 'sniper', 'sniper', 'tank', 'tank'],
+  mix(8, 8, 5, 5),
+  mix(9, 9, 6, 5),
+  mix(9, 10, 6, 6),
+  mix(10, 10, 7, 6),
+  ['phantom', 'sniper', 'sniper', 'rusher', 'rusher'],
+  mix(10, 11, 7, 6),
+  mix(10, 12, 7, 7),
+  mix(11, 12, 8, 7),
+  mix(12, 13, 8, 8),
+  ['apex', 'tank', 'tank', 'sniper', 'sniper', 'rusher', 'rusher'],
 ];
 const FINAL_WAVE = WAVES.length;
 
@@ -736,7 +746,7 @@ function addKill(bot, part) {
   comboMult = comboTimer > 0 ? Math.min(stats.comboMax, comboMult + 1) : 1;
   comboTimer = 4;
   run.maxCombo = Math.max(run.maxCombo, comboMult);
-  const total = Math.round((pts * comboMult * stats.scoreMult) / 10) * 10;
+  const total = Math.round((pts * comboMult) / 10) * 10;
   score += total;
   showPopup(`+${total}${tags.length ? ' ' + tags.join(' ') : ''}${comboMult > 1 ? ` ×${comboMult}` : ''}`);
   addFeedLine(`${bot.type.toUpperCase()} +${total}`);
@@ -820,7 +830,7 @@ function dealDamage(bot, dmg, part, opts = {}) {
       if (Math.random() < GRENADE_DROP_CHANCE * stats.grenadeDropMult) {
         grenades.spawnPickup(pos, 'grenade');
       }
-      if (Math.random() < SCRAP_DROP_CHANCE) {
+      if (Math.random() < Math.min(0.95, SCRAP_DROP_CHANCE * stats.scrapDropMult)) {
         grenades.spawnPickup(pos, 'scrap', SCRAP_VALUES[bot.type] || 10);
       }
     }
@@ -1317,6 +1327,6 @@ viewmodels.rifle.visible = true;
 {
   const best = loadBest();
   if (best.score > 0) {
-    ovMsg.innerHTML = `${FINAL_WAVE} waves. Four bosses. They shoot back.<br />BEST: ${best.score.toLocaleString()} (wave ${best.wave})`;
+    ovMsg.innerHTML = `${FINAL_WAVE} waves. Six bosses. They shoot back.<br />BEST: ${best.score.toLocaleString()} (wave ${best.wave})`;
   }
 }

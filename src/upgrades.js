@@ -51,7 +51,7 @@ export function createStats() {
     doubleJump: false,
     secondWind: false,
     berserker: false,
-    scoreMult: 1,
+    scrapDropMult: 1, // Greed: more frequent scrap drops
     highGround: 1, // damage mult while elevated
     killStreak: false, // every 5th kill refills the mag
     thorns: 0, // damage dealt back to melee attackers
@@ -86,8 +86,8 @@ export const UPGRADES = [
     apply: (s) => { s.speedMult *= 1.08; } },
   { id: 'dressing', tier: 'common', name: 'Field Dressing', desc: '+25% health regen rate',
     apply: (s) => { s.regenRate *= 1.25; } },
-  { id: 'greed', tier: 'common', name: 'Greed', desc: '+10% score from kills',
-    apply: (s) => { s.scoreMult *= 1.1; } },
+  { id: 'greed', tier: 'common', name: 'Greed', desc: '+25% scrap drop chance',
+    apply: (s) => { s.scrapDropMult *= 1.25; } },
 
   // ---- uncommon ----
   { id: 'hollow', tier: 'uncommon', name: 'Hollow Points', desc: '+20% damage',

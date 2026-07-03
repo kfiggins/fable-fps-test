@@ -3,14 +3,6 @@ import * as THREE from 'three';
 // Active abilities: acquired through upgrade cards, bound to Q / E.
 // Each entry: cooldown + tier; behavior lives in AbilityManager.
 export const ABILITIES = {
-  blink: {
-    id: 'blink', name: 'Blink', tier: 'uncommon', cd: 6,
-    desc: 'Dash 8m instantly in your move direction. Brief invulnerability.',
-  },
-  decoy: {
-    id: 'decoy', name: 'Decoy', tier: 'uncommon', cd: 18,
-    desc: 'Project a hologram — enemies attack it for 5s.',
-  },
   healfield: {
     id: 'healfield', name: 'Healing Field', tier: 'uncommon', cd: 20,
     desc: 'Drop a green zone that heals 12/s while you stand in it (8s).',
@@ -20,8 +12,8 @@ export const ABILITIES = {
     desc: 'Fire a claw where you aim — it yanks you there with a boost up.',
   },
   bubble: {
-    id: 'bubble', name: 'Bubble Shield', tier: 'rare', cd: 22,
-    desc: 'Deploy a dome that blocks enemy fire (350hp / 10s). You shoot out freely.',
+    id: 'bubble', name: 'Bubble Shield', tier: 'rare', cd: 26,
+    desc: 'Deploy a dome that blocks enemy fire until it breaks (200hp, max 8s). You shoot out freely.',
   },
   homing: {
     id: 'homing', name: 'Homing Missile', tier: 'rare', cd: 12,
@@ -117,6 +109,13 @@ export class AbilityManager {
     this.shield.hp -= dmg;
     this.ctx.effects.spark(point, 0x7fd8ff);
     this.shield.mesh.material.opacity = 0.45;
+    // shield reddens as it takes damage so you can see it failing
+    const frac = Math.max(0, this.shield.hp / this.shield.maxHp);
+    this.shield.mesh.material.color.setRGB(
+      0.5 + (1 - frac) * 0.5,
+      0.85 * frac + 0.3 * (1 - frac),
+      1 * frac + 0.3 * (1 - frac)
+    );
     if (this.shield.hp <= 0) {
       this.ctx.effects.explosion(this.shield.center, 0x7fd8ff, 1.2);
       this.ctx.sounds.empty();
@@ -134,43 +133,6 @@ export class AbilityManager {
   }
 
   // ---- casts ----
-  cast_blink() {
-    const { player, camera, effects, sounds, setInvuln } = this.ctx;
-    const v = player.velocity;
-    let dx = v.x;
-    let dz = v.z;
-    if (Math.hypot(dx, dz) < 1) {
-      camera.getWorldDirection(_v1);
-      dx = _v1.x;
-      dz = _v1.z;
-    }
-    const l = Math.hypot(dx, dz) || 1;
-    effects.burst(player.position.clone(), 0x9fd8ff, 12, 4, 0.3);
-    player.position.x += (dx / l) * 8;
-    player.position.z += (dz / l) * 8;
-    setInvuln(0.35);
-    effects.burst(player.position.clone(), 0x9fd8ff, 12, 4, 0.3);
-    sounds.blink();
-  }
-
-  cast_decoy() {
-    this.removeZone('decoy');
-    const { scene, player, sounds } = this.ctx;
-    const group = new THREE.Group();
-    const mat = new THREE.MeshStandardMaterial({
-      color: 0x6fd8e8, transparent: true, opacity: 0.55, emissive: 0x2b6a78,
-    });
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 0.9, 6, 12), mat);
-    body.position.y = 0.85;
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.28, 12, 10), mat);
-    head.position.y = 1.62;
-    group.add(body, head);
-    group.position.set(player.position.x, player.position.y - 1.7, player.position.z);
-    scene.add(group);
-    this.decoy = { mesh: group, pos: group.position.clone().setY(player.position.y), t: 5 };
-    sounds.summon();
-  }
-
   cast_healfield() {
     this.removeZone('healZone');
     const { scene, player, sounds } = this.ctx;
@@ -220,7 +182,7 @@ export class AbilityManager {
     );
     mesh.position.copy(center);
     scene.add(mesh);
-    this.shield = { mesh, center, radius: 4, hp: 350, t: 10 };
+    this.shield = { mesh, center, radius: 4, hp: 200, maxHp: 200, t: 8 };
     sounds.bubble();
   }
 
@@ -343,14 +305,6 @@ export class AbilityManager {
       s.t -= dt;
       s.mesh.material.opacity = Math.max(0.16, s.mesh.material.opacity - dt * 0.8);
       if (s.t <= 0) this.removeZone('shield');
-    }
-
-    if (this.decoy) {
-      const d = this.decoy;
-      d.t -= dt;
-      d.mesh.rotation.y += dt * 1.5;
-      d.mesh.children[0].material.opacity = 0.35 + Math.sin(d.t * 8) * 0.2;
-      if (d.t <= 0) this.removeZone('decoy');
     }
 
     for (let i = this.missiles.length - 1; i >= 0; i--) {

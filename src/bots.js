@@ -29,7 +29,7 @@ export const BOT_TYPES = {
     aimed: { dmg: 28, telegraph: 1.3, lockTime: 0.3, interval: [3.2, 4.4] },
   },
   warden: {
-    hp: 1100, speed: 2.4, scale: 2.2, points: 2000, color: 0x8a1f2d, visor: 0xffd24d,
+    hp: 4500, speed: 2.4, scale: 2.2, points: 2000, color: 0x8a1f2d, visor: 0xffd24d,
     ai: 'skirmish', range: [7, 16], wide: true, boss: true, name: 'THE WARDEN',
     burst: { n: 6, gap: 0.09, dmg: [6, 9], spread: 0.05, interval: [2.8, 3.6] },
     shock: { dmg: 30, radius: 7, trigger: 5.5, cd: 4.5 },
@@ -37,7 +37,7 @@ export const BOT_TYPES = {
     orbs: { n: 3, spread: 0.3, speed: 9, dmg: 25, interval: [5, 7] },
   },
   titan: {
-    hp: 2600, speed: 2.6, scale: 3, points: 5000, color: 0x2a1136, visor: 0xff3df0,
+    hp: 10500, speed: 2.6, scale: 3, points: 5000, color: 0x2a1136, visor: 0xff3df0,
     ai: 'skirmish', range: [8, 18], wide: true, boss: true, name: 'THE TITAN',
     burst: { n: 8, gap: 0.09, dmg: [7, 10], spread: 0.05, interval: [2.6, 3.4] },
     shock: { dmg: 40, radius: 8, trigger: 6.5, cd: 4 },
@@ -47,7 +47,7 @@ export const BOT_TYPES = {
     missiles: { n: 2, dmg: 30, radius: 3, interval: [9, 12] },
   },
   butcher: {
-    hp: 4600, speed: 4.2, scale: 2.4, points: 7000, color: 0x7a1500, visor: 0xff4444,
+    hp: 18500, speed: 4.2, scale: 2.4, points: 7000, color: 0x7a1500, visor: 0xff4444,
     ai: 'skirmish', range: [3, 9], wide: true, spike: true, boss: true, name: 'THE BUTCHER',
     burst: { n: 8, gap: 0.09, dmg: [8, 11], spread: 0.05, interval: [2.4, 3] },
     melee: { dmg: 22, range: 3.4, cd: 1.2 },
@@ -57,7 +57,7 @@ export const BOT_TYPES = {
     enrage: { below: 0.4, speed: 1.4, rate: 1.5 },
   },
   overlord: {
-    hp: 8500, speed: 2.8, scale: 3.6, points: 15000, color: 0x2b2005, visor: 0xffcc00,
+    hp: 34000, speed: 2.8, scale: 3.6, points: 15000, color: 0x2b2005, visor: 0xffcc00,
     ai: 'skirmish', range: [8, 18], wide: true, boss: true, name: 'THE OVERLORD',
     burst: { n: 10, gap: 0.08, dmg: [8, 12], spread: 0.05, interval: [2.2, 3] },
     shock: { dmg: 45, radius: 9, trigger: 7, cd: 3 },
@@ -67,6 +67,28 @@ export const BOT_TYPES = {
     missiles: { n: 2, dmg: 35, radius: 3.5, interval: [8, 11] },
     artillery: { n: 4, dmg: 45, radius: 5, telegraph: 1.6, interval: [9, 12] },
     enrage: { below: 0.35, speed: 1.5, rate: 1.6 },
+  },
+  phantom: {
+    hp: 42000, speed: 3.6, scale: 2, points: 30000, color: 0x3d4d5c, visor: 0x9fefff,
+    ai: 'skirmish', range: [10, 22], boss: true, name: 'THE PHANTOM',
+    burst: { n: 5, gap: 0.09, dmg: [8, 11], spread: 0.045, interval: [2.4, 3.2] },
+    aimed: { dmg: 45, telegraph: 0.8, lockTime: 0.25, interval: [5, 7] },
+    orbs: { n: 7, spread: 0.55, speed: 11, dmg: 28, interval: [4, 6] },
+    summon: { types: ['sniper', 'rusher', 'rusher'], cd: 12, max: 5 },
+    teleport: { interval: [5, 8], range: [9, 17] },
+    enrage: { below: 0.35, speed: 1.3, rate: 1.4 },
+  },
+  apex: {
+    hp: 65000, speed: 2.4, scale: 4, points: 60000, color: 0x101418, visor: 0xff2222,
+    ai: 'skirmish', range: [9, 20], wide: true, boss: true, name: 'THE APEX',
+    burst: { n: 12, gap: 0.07, dmg: [9, 13], spread: 0.05, interval: [2.2, 3] },
+    shock: { dmg: 50, radius: 10, trigger: 8, cd: 3 },
+    summon: { types: ['tank', 'sniper', 'rusher', 'rusher'], cd: 10, max: 8 },
+    aimed: { dmg: 55, telegraph: 0.85, lockTime: 0.3, interval: [6, 8] },
+    orbs: { n: 8, spread: 0.55, speed: 11, dmg: 30, interval: [4, 6] },
+    missiles: { n: 3, dmg: 35, radius: 3.5, interval: [7, 10] },
+    artillery: { n: 5, dmg: 50, radius: 5, telegraph: 1.6, interval: [8, 11] },
+    enrage: { below: 0.45, speed: 1.35, rate: 1.5 },
   },
 };
 
@@ -177,6 +199,7 @@ class Bot {
     this.orbTimer = 3;
     this.missileTimer = 6;
     this.artilleryTimer = 5;
+    this.teleTimer = 4;
     this.stunTimer = 0;
   }
 }
@@ -745,6 +768,24 @@ export class BotManager {
 
     // boss ranged patterns
     const rate = bot.enraged ? cfg.enrage.rate : 1;
+    if (cfg.teleport) {
+      bot.teleTimer -= dt;
+      if (bot.teleTimer <= 0) {
+        const [a, b] = cfg.teleport.interval;
+        bot.teleTimer = (a + Math.random() * (b - a)) / rate;
+        const ang = Math.random() * Math.PI * 2;
+        const r =
+          cfg.teleport.range[0] +
+          Math.random() * (cfg.teleport.range[1] - cfg.teleport.range[0]);
+        this.effects.beam(pos.clone(), cfg.visor);
+        pos.set(playerPos.x + Math.cos(ang) * r, 0, playerPos.z + Math.sin(ang) * r);
+        clampToArena(pos, bot.radius);
+        collideXZ(pos, bot.radius, pos.y, pos.y + 1.8 * cfg.scale, this.boxes);
+        bot.vy = 0;
+        this.effects.beam(pos.clone(), cfg.visor);
+        this.sounds.summon();
+      }
+    }
     if (cfg.orbs) {
       bot.orbTimer -= dt;
       if (bot.orbTimer <= 0 && bot.hasLOS) {

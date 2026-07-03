@@ -1,8 +1,8 @@
 # Mini FPS
 
 A tiny browser-based roguelike first-person shooter built with [Three.js](https://threejs.org/)
-and Vite. Survive **20 waves** in a walled arena — climb the towers, hold the three-story
-building, build a run out of upgrades, and take down four bosses along the way.
+and Vite. Survive **30 waves** in a walled arena — climb the towers, hold the three-story
+building, build a run out of upgrades, and take down six bosses along the way.
 Play it at **https://kfiggins.github.io/fable-fps-test/**.
 
 ## Run it
@@ -45,8 +45,8 @@ or the **jetpack (300)** — hold Space in the air to fly, then buy fuel/thrust 
 until you can land on the building roof.
 
 **Abilities** appear in the upgrade pool as uncommon/rare/legendary cards and bind to
-**Q or E** (two slots — replace or skip freely): Blink, Decoy, Healing Field, Grapple
-Claw, Bubble Shield, Homing Missile, Shock Nova, Sweep Laser, Overclock.
+**Q or E** (two slots — replace or skip freely): Healing Field, Grapple Claw,
+Bubble Shield (breaks under fire), Homing Missile, Shock Nova, Sweep Laser, Overclock.
 
 Synergies are the point: Vampire + Berserker, Pierce + High Ground, Cluster Bombs +
 Grenadier, Grapple Claw + High Ground, Golden Gun + Overclock…
@@ -70,7 +70,9 @@ inside… their summons aren't.
 | **The Warden** (5) | + slow orb volleys you must strafe | Slam dodged by jumping |
 | **The Titan** (10) | + homing missiles — break lock behind walls | Bigger target |
 | **The Butcher** (15) | FAST melee monster + artillery (run from the shrinking red rings) | Enormous head |
-| **The Overlord** (20) | Orbs, missiles, artillery, summons, enrage | The final exam |
+| **The Overlord** (20) | Orbs, missiles, artillery, summons, enrage | Merely the midpoint |
+| **The Phantom** (25) | Teleports around you, aimed shots, orb storms | Fragile-ish for a boss |
+| **The Apex** (30) | Every attack pattern in the game at once | The actual final exam |
 
 Regular enemies gain health and damage every wave. Killing a boss wipes the field.
 
