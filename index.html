@@ -179,6 +179,13 @@
 
     #fuel-bar-bg { height: 5px; margin-top: 6px; background: rgba(255,255,255,.1); border-radius: 3px; overflow: hidden; }
     #fuel-bar { height: 100%; width: 100%; background: linear-gradient(90deg, #ffb050, #ffd36b); border-radius: 3px; }
+    #armor-bar-bg {
+      height: 7px; margin-bottom: 6px; border-radius: 3px; overflow: hidden;
+      background:
+        repeating-linear-gradient(90deg, transparent 0 24.2%, rgba(6,9,14,.9) 24.2% 25.8%),
+        rgba(255,255,255,.1);
+    }
+    #armor-bar { height: 100%; width: 0%; background: linear-gradient(90deg, #8fa8c8, #c8d8ee); border-radius: 3px; }
 
     #abilities {
       position: absolute; bottom: 84px; left: 50%; transform: translateX(-50%);
@@ -292,6 +299,7 @@
     <div id="banner"></div>
     <div id="popup"></div>
     <div id="health-panel" class="panel">
+      <div id="armor-bar-bg" class="hidden"><div id="armor-bar"></div></div>
       <div id="health-label">HEALTH</div>
       <div id="health-bar-bg"><div id="health-bar"></div></div>
       <div id="fuel-bar-bg" class="hidden"><div id="fuel-bar"></div></div>

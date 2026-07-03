@@ -41,8 +41,9 @@ drop two) and **scrap**. Grenades throw with G; scrap is currency.
 After each wave, pick 1 of 3 randomized upgrades (common/uncommon/rare/legendary — odds
 improve every wave you survive). **Boss waves guarantee a legendary option.** Scrap is
 spent on the upgrade screen: **reroll (75)**, **grenade (30)**, **helper drone (125, max 2)**,
-or the **jetpack (300)** — hold Space in the air to fly, then buy fuel/thrust upgrades
-until you can land on the building roof.
+the **jetpack (300)** — hold Space in the air to fly, then buy fuel/thrust upgrades
+until you can land on the building roof — or **armor bars (25 each, max 4)** that soak
+25 damage apiece and stay broken until you rebuy them.
 
 **Abilities** appear in the upgrade pool as uncommon/rare/legendary cards and bind to
 **Q or E** (two slots — replace or skip freely): Healing Field, Grapple Claw,

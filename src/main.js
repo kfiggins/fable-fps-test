@@ -23,6 +23,9 @@ const COST_DRONE = 125;
 const COST_JETPACK = 300;
 const COST_JET_UP = 150;
 const JET_UP_MAX = 3;
+const COST_ARMOR = 25;
+const ARMOR_PER_BAR = 25;
+const ARMOR_MAX = ARMOR_PER_BAR * 4;
 
 function mix(g, r, s, t) {
   return [
@@ -182,6 +185,8 @@ const abilityQ = el('ab-q');
 const abilityE = el('ab-e');
 const fuelWrap = el('fuel-bar-bg');
 const fuelBar = el('fuel-bar');
+const armorWrap = el('armor-bar-bg');
+const armorBar = el('armor-bar');
 
 // --- game state ---
 let state = 'menu';
@@ -221,6 +226,7 @@ let offerOpenedAt = 0; // guards against click-through when the offer appears
 let jetFuelUps = 0;
 let jetThrustUps = 0;
 let jetSoundAcc = 0;
+let armor = 0; // scrap-bought, absorbs damage first, never regenerates
 
 function offerLocked() {
   return performance.now() - offerOpenedAt < 700;
@@ -394,6 +400,7 @@ function startGame() {
   player.jetpack.fuel = 0;
   jetFuelUps = 0;
   jetThrustUps = 0;
+  armor = 0;
   player.maxHealth = 100;
   player.reset();
   syncStats();
@@ -518,6 +525,18 @@ function renderShop() {
         : `HELPER DRONE — ${COST_DRONE} (${drones.count()}/${DRONE_MAX})`,
       can: scrap >= COST_DRONE && drones.count() < DRONE_MAX,
       act: () => { scrap -= COST_DRONE; drones.add(); sounds.pickup(); addFeedLine('DRONE ONLINE'); renderShop(); },
+    },
+    {
+      label: armor >= ARMOR_MAX
+        ? 'ARMOR — MAX (4/4)'
+        : `+1 ARMOR BAR — ${COST_ARMOR} (${Math.floor(armor / ARMOR_PER_BAR)}/4)`,
+      can: scrap >= COST_ARMOR && armor < ARMOR_MAX,
+      act: () => {
+        scrap -= COST_ARMOR;
+        armor = Math.min(ARMOR_MAX, armor + ARMOR_PER_BAR);
+        sounds.pickup();
+        renderShop();
+      },
     },
   ];
   if (!player.jetpack.owned) {
@@ -1022,12 +1041,20 @@ bots.onPlayerHit = (dmg, kind, sourceBot) => {
   if (kind === 'melee' && stats.thorns && sourceBot) {
     dealDamage(sourceBot, stats.thorns, 'body', { source: 'other', depth: 1 });
   }
-  const final = Math.max(1, Math.round(dmg * (1 - stats.damageReduction)));
-  vignetteAlpha = 0.85;
+  let final = Math.max(1, Math.round(dmg * (1 - stats.damageReduction)));
+  // armor soaks damage first and stays broken until rebought
+  if (armor > 0) {
+    const absorbed = Math.min(armor, final);
+    armor -= absorbed;
+    final -= absorbed;
+    sounds.hit();
+    if (armor === 0) addFeedLine('ARMOR DESTROYED');
+  }
+  vignetteAlpha = final > 0 ? 0.85 : Math.max(vignetteAlpha, 0.35);
   addShake(
     kind === 'shock' || kind === 'blast' ? 1.3 : kind === 'melee' ? 0.7 : 0.35 + final / 60
   );
-  sounds.hurt();
+  if (final > 0) sounds.hurt();
   if (stats.adrenalSurge) surgeTimer = 3;
   const dead = player.takeDamage(final);
   if (dead) {
@@ -1142,6 +1169,14 @@ function updateHUD(dt) {
     }
   }
 
+  // armor
+  if (armor > 0) {
+    armorWrap.classList.remove('hidden');
+    armorBar.style.width = `${(armor / ARMOR_MAX) * 100}%`;
+  } else {
+    armorWrap.classList.add('hidden');
+  }
+
   // jetpack fuel
   if (player.jetpack.owned) {
     fuelWrap.classList.remove('hidden');
@@ -1190,6 +1225,8 @@ window.__game = {
     },
     scrap(n) { scrap = n; },
     grenades(n) { grenadeCount = n; },
+    armor(n) { armor = n; },
+    getArmor: () => armor,
     addDrone() { return drones.add(); },
     giveAbility(id, slot = 'Q') {
       if (!ABILITIES[id]) return false;
