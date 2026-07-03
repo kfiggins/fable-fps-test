@@ -179,6 +179,55 @@ export class Sounds {
     this.sweep('sine', base * 1.3, base * 1.9, 0.14, 0.4, 0.09);
   }
 
+  orbVolley() {
+    this.sweep('sawtooth', 200, 90, 0.3, 0.3);
+  }
+
+  missileLaunch() {
+    this.sweep('sawtooth', 140, 520, 0.4, 0.3);
+    this.noise(0.2, 0.2);
+  }
+
+  artilleryWarn() {
+    this.sweep('square', 880, 880, 0.09, 0.3);
+    this.sweep('square', 880, 880, 0.09, 0.3, 0.18);
+    this.sweep('square', 880, 880, 0.09, 0.3, 0.36);
+  }
+
+  grapple() {
+    this.sweep('square', 300, 900, 0.12, 0.3);
+    this.noise(0.08, 0.15);
+  }
+
+  bubble() {
+    this.sweep('sine', 300, 620, 0.25, 0.35);
+  }
+
+  heal() {
+    this.sweep('sine', 520, 780, 0.2, 0.25);
+    this.sweep('sine', 660, 990, 0.2, 0.2, 0.12);
+  }
+
+  blink() {
+    this.sweep('sine', 900, 1500, 0.09, 0.3);
+    this.noise(0.05, 0.15);
+  }
+
+  laserSweep() {
+    this.sweep('sawtooth', 1400, 400, 1.1, 0.35);
+    this.sweep('sine', 2000, 700, 1.1, 0.2);
+  }
+
+  overclockUp() {
+    this.sweep('square', 250, 500, 0.12, 0.3);
+    this.sweep('square', 500, 1000, 0.14, 0.3, 0.1);
+    this.sweep('square', 1000, 1600, 0.16, 0.3, 0.22);
+  }
+
+  jet() {
+    this.noise(0.09, 0.12);
+  }
+
   victory() {
     this.sweep('sine', 520, 520, 0.14, 0.4);
     this.sweep('sine', 660, 660, 0.14, 0.4, 0.15);

@@ -1,6 +1,9 @@
+import { ABILITIES } from './abilities.js';
+
 // Roguelike upgrade system. Every upgrade is pure data: it mutates the run's
 // `stats` object, and game code reads stats instead of constants. To add a new
-// upgrade, add one entry to UPGRADES — nothing else.
+// upgrade, add one entry to UPGRADES — nothing else. Abilities join the pool
+// as `ability` cards (assigned to Q/E instead of applying stats).
 
 export const TIERS = {
   common: { label: 'COMMON', color: '#b0b7c0' },
@@ -165,6 +168,12 @@ export const UPGRADES = [
     apply: (s) => { s.maxHealthBonus += 100; s.speedMult *= 0.85; } },
   { id: 'clusterbombs', tier: 'legendary', name: 'Cluster Bombs', desc: 'Grenades split into 3 bomblets', unique: true,
     apply: (s) => { s.clusterBombs = true; } },
+
+  // ---- active abilities (bind to Q or E on pick) ----
+  ...Object.values(ABILITIES).map((a) => ({
+    id: `ab-${a.id}`, tier: a.tier, name: a.name, desc: a.desc,
+    unique: true, ability: a.id, apply: () => {},
+  })),
 ];
 
 const TIER_ORDER = ['common', 'uncommon', 'rare', 'legendary'];

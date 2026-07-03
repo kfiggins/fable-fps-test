@@ -90,7 +90,10 @@
     #callout.tier-2 { color: #ffd36b; }
     #callout.tier-3 { color: #ffab4d; }
     #callout.tier-4 { color: #ff7a4d; }
-    #callout.tier-5 { color: #ff4b6b; }
+    #callout.tier-5 { color: #ff4b6b; font-size: 34px; }
+    #callout.tier-6 { color: #ff3df0; font-size: 36px; }
+    #callout.tier-7 { color: #b44dff; font-size: 38px; }
+    #callout.tier-8 { color: #7fe7ff; font-size: 42px; text-shadow: 0 0 24px #7fe7ff88; }
     #callout.pop { animation: calloutpop 1s ease-out forwards; }
     @keyframes calloutpop {
       0% { opacity: 0; transform: translateX(-50%) scale(.5); }
@@ -174,6 +177,46 @@
       100% { opacity: 0; transform: translate(-50%, -26px) scale(1); }
     }
 
+    #fuel-bar-bg { height: 5px; margin-top: 6px; background: rgba(255,255,255,.1); border-radius: 3px; overflow: hidden; }
+    #fuel-bar { height: 100%; width: 100%; background: linear-gradient(90deg, #ffb050, #ffd36b); border-radius: 3px; }
+
+    #abilities {
+      position: absolute; bottom: 84px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 10px;
+    }
+    .ab-slot {
+      display: flex; align-items: center; gap: 8px;
+      padding: 7px 12px; border-radius: 8px;
+      background: rgba(10, 14, 20, .55); border: 1px solid rgba(255,255,255,.15);
+      color: #e8ecf1; font-size: 11px; letter-spacing: 1px;
+    }
+    .ab-slot.empty { opacity: .35; }
+    .ab-slot.cooling { opacity: .55; }
+    .ab-key {
+      display: inline-block; width: 20px; height: 20px; line-height: 20px;
+      text-align: center; border: 1px solid rgba(255,255,255,.4); border-radius: 4px;
+      font-weight: bold;
+    }
+    .ab-cd { color: #ffd36b; font-weight: bold; min-width: 14px; }
+
+    .slot-dialog {
+      width: 380px; padding: 26px 22px; text-align: center;
+      background: rgba(14, 19, 28, .96); border: 2px solid; border-radius: 12px;
+      color: #e8ecf1;
+    }
+    .slot-row { display: flex; gap: 12px; justify-content: center; margin-top: 18px; }
+    .slot-btn {
+      flex: 1; padding: 12px 8px; font-family: inherit; cursor: pointer;
+      background: rgba(20, 27, 38, .95); color: #e8ecf1;
+      border: 1px solid rgba(255,255,255,.25); border-radius: 8px;
+      display: flex; flex-direction: column; gap: 5px; align-items: center;
+      transition: transform .1s;
+    }
+    .slot-btn:hover { transform: translateY(-2px); border-color: #fff; }
+    .slot-btn b { font-size: 18px; }
+    .slot-btn span { font-size: 10px; color: #9fb0c3; }
+    .slot-btn.back { flex: 0 0 80px; }
+
     #build {
       position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%);
       display: flex; gap: 6px; flex-wrap: wrap; justify-content: center;
@@ -251,6 +294,11 @@
     <div id="health-panel" class="panel">
       <div id="health-label">HEALTH</div>
       <div id="health-bar-bg"><div id="health-bar"></div></div>
+      <div id="fuel-bar-bg" class="hidden"><div id="fuel-bar"></div></div>
+    </div>
+    <div id="abilities">
+      <div class="ab-slot empty" id="ab-q"><span class="ab-key">Q</span><span class="ab-name">—</span><span class="ab-cd"></span></div>
+      <div class="ab-slot empty" id="ab-e"><span class="ab-key">E</span><span class="ab-name">—</span><span class="ab-cd"></span></div>
     </div>
     <div id="ammo-panel" class="panel">
       <div id="ammo">10</div>
@@ -272,8 +320,8 @@
     <div id="run-stats"></div>
     <div id="ov-sub">
       WASD move &middot; SHIFT sprint &middot; SPACE jump &middot; R reload &middot; G grenade<br />
-      RIGHT-CLICK aim (rifle sights, marksman scope) &middot; Q / 1-4 switch weapon<br />
-      Climb the towers &middot; jump to dodge boss slams &middot; chain kills for combo score
+      RIGHT-CLICK aim &middot; SCROLL or 1-2 weapons &middot; Q / E abilities<br />
+      Dodge boss orbs &middot; break missile lock behind walls &middot; RUN from red rings
     </div>
     <div class="prompt">CLICK TO PLAY</div>
   </div>

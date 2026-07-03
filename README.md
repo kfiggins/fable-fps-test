@@ -23,10 +23,11 @@ Then open the printed URL (usually http://localhost:5173) and click to play.
 | Right click (hold) | Aim down sights (rifle irons / marksman scope) |
 | WASD | Move |
 | Shift | Sprint |
-| Space | Jump (also dodges boss slams) |
+| Space | Jump · hold in air to jetpack (once bought) |
 | R | Reload |
 | G | Throw grenade |
-| Q / 1–2 | Switch weapon |
+| Q / E | Abilities |
+| Scroll / 1–2 | Switch weapon |
 | Esc | Pause / release mouse |
 
 ## Loadout
@@ -38,12 +39,17 @@ drop two) and **scrap**. Grenades throw with G; scrap is currency.
 ## The roguelike layer
 
 After each wave, pick 1 of 3 randomized upgrades (common/uncommon/rare/legendary — odds
-improve every wave you survive). **Boss waves guarantee a legendary option.** Scrap can be
-spent on the upgrade screen: **reroll the offer (50)**, **buy a grenade (30)**, or buy a
-**helper drone (100, max 2)** that follows you and plinks at enemies for the rest of the run.
+improve every wave you survive). **Boss waves guarantee a legendary option.** Scrap is
+spent on the upgrade screen: **reroll (75)**, **grenade (30)**, **helper drone (125, max 2)**,
+or the **jetpack (300)** — hold Space in the air to fly, then buy fuel/thrust upgrades
+until you can land on the building roof.
 
-38 upgrades and counting — synergies are the point: Vampire + Berserker, Pierce + High
-Ground, Cluster Bombs + Grenadier, Golden Gun + Gunslinger…
+**Abilities** appear in the upgrade pool as uncommon/rare/legendary cards and bind to
+**Q or E** (two slots — replace or skip freely): Blink, Decoy, Healing Field, Grapple
+Claw, Bubble Shield, Homing Missile, Shock Nova, Sweep Laser, Overclock.
+
+Synergies are the point: Vampire + Berserker, Pierce + High Ground, Cluster Bombs +
+Grenadier, Grapple Claw + High Ground, Golden Gun + Overclock…
 
 ## The map
 
@@ -61,10 +67,10 @@ inside… their summons aren't.
 | **Rusher** | Very fast, small, zigzags, brutal melee | One body shot kills it |
 | **Tank** | Huge health pool, heavy cannon | Crawls, giant hitbox, slow fire |
 | **Sniper** | Laser-telegraphed shots that HURT (red laser = locked — move!) | One-shot fragile, flees up close |
-| **The Warden** (5) | Burst cannon, ground slam, summons | Slam dodged by jumping |
-| **The Titan** (10) | All of the above + aimed cannon | Bigger target |
-| **The Butcher** (15) | FAST melee monster, enrages at 40% | Enormous head |
-| **The Overlord** (20) | The full kit, enrages at 35% | The final exam |
+| **The Warden** (5) | + slow orb volleys you must strafe | Slam dodged by jumping |
+| **The Titan** (10) | + homing missiles — break lock behind walls | Bigger target |
+| **The Butcher** (15) | FAST melee monster + artillery (run from the shrinking red rings) | Enormous head |
+| **The Overlord** (20) | Orbs, missiles, artillery, summons, enrage | The final exam |
 
 Regular enemies gain health and damage every wave. Killing a boss wipes the field.
 

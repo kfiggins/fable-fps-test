@@ -8,6 +8,7 @@ import { UPGRADES, TIERS, createStats, rollOffer } from './upgrades.js';
 import { WEAPONS, WEAPON_ORDER } from './weapons.js';
 import { GrenadeManager } from './grenades.js';
 import { DroneManager, DRONE_MAX } from './drone.js';
+import { ABILITIES, AbilityManager } from './abilities.js';
 
 const BASE_FOV = 75;
 const LONGSHOT_DIST = 25;
@@ -16,9 +17,12 @@ const SCRAP_DROP_CHANCE = 0.45;
 const GRENADE_MAX = 5;
 const GRENADE_RADIUS = 6;
 const BOSS_WAVES = [5, 10, 15];
-const COST_REROLL = 50;
+const COST_REROLL = 75;
 const COST_GRENADE = 30;
-const COST_DRONE = 100;
+const COST_DRONE = 125;
+const COST_JETPACK = 300;
+const COST_JET_UP = 150;
+const JET_UP_MAX = 3;
 
 function mix(g, r, s, t) {
   return [
@@ -80,6 +84,15 @@ const sounds = new Sounds();
 const bots = new BotManager(scene, world, effects, sounds);
 const grenades = new GrenadeManager(scene, effects, sounds);
 const drones = new DroneManager(scene, world.occluders, effects, sounds);
+const abilities = new AbilityManager({
+  scene, camera, player, bots, world, effects, sounds,
+  dealDamage: (...a) => dealDamage(...a),
+  heal: (amt) => { player.health = Math.min(healCap(), player.health + amt); },
+  setInvuln: (t) => { invulnTimer = Math.max(invulnTimer, t); },
+  addFeedLine: (t) => addFeedLine(t),
+  addShake: (a) => addShake(a),
+});
+bots.onShieldHit = (dmg, point) => abilities.onShieldHit(dmg, point);
 
 // --- weapon viewmodels ---
 const gunMat = new THREE.MeshStandardMaterial({ color: 0x2f3138, roughness: 0.5, metalness: 0.4 });
@@ -155,6 +168,10 @@ const upgradeCards = el('upgrade-cards');
 const shopBar = el('shop');
 const scopeOverlay = el('scope');
 const crosshair = el('crosshair');
+const abilityQ = el('ab-q');
+const abilityE = el('ab-e');
+const fuelWrap = el('fuel-bar-bg');
+const fuelBar = el('fuel-bar');
 
 // --- game state ---
 let state = 'menu';
@@ -189,7 +206,11 @@ let invulnTimer = 0;
 let shotCounter = 0;
 let streakCounter = 0;
 let pendingBossOffer = false;
+let currentOffer = [];
 let offerOpenedAt = 0; // guards against click-through when the offer appears
+let jetFuelUps = 0;
+let jetThrustUps = 0;
+let jetSoundAcc = 0;
 
 function offerLocked() {
   return performance.now() - offerOpenedAt < 700;
@@ -224,7 +245,9 @@ const healCap = () => player.maxHealth * (stats.overshield ? 1.3 : 1);
 const berserkActive = () =>
   stats.berserker && player.health < player.maxHealth * 0.3;
 const fireRateMult = () =>
-  stats.fireRateMult * (surgeTimer > 0 ? 1.3 ** stats.adrenalSurge : 1);
+  stats.fireRateMult *
+  (surgeTimer > 0 ? 1.3 ** stats.adrenalSurge : 1) *
+  (abilities.overclockActive() ? 1.6 : 1);
 const ownedUniqueIds = () =>
   new Set(
     [...owned.keys()].filter((id) => UPGRADES.find((u) => u.id === id)?.unique)
@@ -296,12 +319,15 @@ function showBanner(text, sub = '') {
 }
 
 function showCallout(n) {
-  const labels = { 2: 'DOUBLE KILL', 3: 'TRIPLE KILL', 4: 'QUAD KILL' };
-  callout.textContent = labels[n] || 'RAMPAGE';
-  callout.className = `show tier-${Math.min(n, 5)}`;
+  const labels = {
+    2: 'DOUBLE KILL', 3: 'TRIPLE KILL', 4: 'QUADRA KILL',
+    5: 'PENTA KILL', 6: 'HEXA KILL', 7: 'RAMPAGE',
+  };
+  callout.textContent = labels[n] || 'GODLIKE';
+  callout.className = `show tier-${Math.min(n, 8)}`;
   void callout.offsetWidth;
   callout.classList.add('pop');
-  sounds.callout(Math.min(n, 5));
+  sounds.callout(Math.min(n, 8));
 }
 
 function showPopup(text) {
@@ -349,6 +375,15 @@ function startGame() {
   grenadeCd = 0;
   grenades.clear();
   drones.clear();
+  abilities.reset();
+  bots.shield = null;
+  bots.decoyPos = null;
+  player.jetpack.owned = false;
+  player.jetpack.maxFuel = 1.3;
+  player.jetpack.thrust = 38;
+  player.jetpack.fuel = 0;
+  jetFuelUps = 0;
+  jetThrustUps = 0;
   player.maxHealth = 100;
   player.reset();
   syncStats();
@@ -384,10 +419,13 @@ function startWave(n) {
 }
 
 // --- upgrade offers + scrap shop ---
+function rollNewOffer() {
+  currentOffer = rollOffer(waveNum, ownedUniqueIds(), stats.offerSize, pendingBossOffer);
+}
+
 function renderOffer() {
-  const offer = rollOffer(waveNum, ownedUniqueIds(), stats.offerSize, pendingBossOffer);
   upgradeCards.innerHTML = '';
-  for (const upg of offer) {
+  for (const upg of currentOffer) {
     const tier = TIERS[upg.tier];
     const count = owned.get(upg.id) || 0;
     const card = document.createElement('button');
@@ -395,16 +433,60 @@ function renderOffer() {
     card.style.borderColor = tier.color;
     card.style.boxShadow = `0 0 24px ${tier.color}33, inset 0 0 14px ${tier.color}14`;
     card.innerHTML =
-      `<div class="tier-label" style="color:${tier.color}">${tier.label}</div>` +
+      `<div class="tier-label" style="color:${tier.color}">${tier.label}${upg.ability ? ' · ABILITY' : ''}</div>` +
       `<div class="upg-name">${upg.name}</div>` +
       `<div class="upg-desc">${upg.desc}</div>` +
-      (count ? `<div class="upg-owned">owned ×${count}</div>` : '');
+      (upg.ability
+        ? `<div class="upg-owned">Q: ${abilities.slots.Q ? ABILITIES[abilities.slots.Q].name : 'empty'} · E: ${abilities.slots.E ? ABILITIES[abilities.slots.E].name : 'empty'}</div>`
+        : count ? `<div class="upg-owned">owned ×${count}</div>` : '');
     card.onclick = () => {
-      if (!offerLocked()) pickUpgrade(upg);
+      if (offerLocked()) return;
+      if (upg.ability) showSlotDialog(upg);
+      else pickUpgrade(upg);
     };
     upgradeCards.appendChild(card);
   }
   renderShop();
+}
+
+// ability cards: choose which key to bind it to (or go back)
+function showSlotDialog(upg) {
+  upgradeCards.innerHTML = '';
+  const tier = TIERS[upg.tier];
+  const wrap = document.createElement('div');
+  wrap.className = 'slot-dialog';
+  wrap.style.borderColor = tier.color;
+  const slotLabel = (s) =>
+    abilities.slots[s] ? `replaces ${ABILITIES[abilities.slots[s]].name}` : 'empty';
+  wrap.innerHTML =
+    `<div class="tier-label" style="color:${tier.color}">${tier.label} ABILITY</div>` +
+    `<div class="upg-name">${upg.name}</div>` +
+    `<div class="upg-desc">${upg.desc}</div>`;
+  const row = document.createElement('div');
+  row.className = 'slot-row';
+  for (const s of ['Q', 'E']) {
+    const btn = document.createElement('button');
+    btn.className = 'slot-btn';
+    btn.innerHTML = `<b>${s}</b><span>${slotLabel(s)}</span>`;
+    btn.onclick = () => {
+      abilities.assign(s, upg.ability);
+      owned.set(upg.id, 1);
+      updateBuildStrip();
+      addFeedLine(`${upg.name} → ${s}`);
+      sounds.pickup();
+      upgradeScreen.classList.add('hidden');
+      canvas.requestPointerLock();
+      startWave(waveNum + 1);
+    };
+    row.appendChild(btn);
+  }
+  const back = document.createElement('button');
+  back.className = 'slot-btn back';
+  back.innerHTML = '<b>←</b><span>back</span>';
+  back.onclick = () => renderOffer();
+  row.appendChild(back);
+  wrap.appendChild(row);
+  upgradeCards.appendChild(wrap);
 }
 
 function renderShop() {
@@ -412,13 +494,11 @@ function renderShop() {
   const items = [
     {
       label: `REROLL — ${COST_REROLL}`,
-      cost: COST_REROLL,
       can: scrap >= COST_REROLL,
-      act: () => { scrap -= COST_REROLL; sounds.reroll(); renderOffer(); },
+      act: () => { scrap -= COST_REROLL; sounds.reroll(); rollNewOffer(); renderOffer(); },
     },
     {
       label: grenadeCount >= GRENADE_MAX ? 'GRENADE — MAX' : `+1 GRENADE — ${COST_GRENADE}`,
-      cost: COST_GRENADE,
       can: scrap >= COST_GRENADE && grenadeCount < GRENADE_MAX,
       act: () => { scrap -= COST_GRENADE; grenadeCount++; sounds.pickup(); renderShop(); },
     },
@@ -426,11 +506,51 @@ function renderShop() {
       label: drones.count() >= DRONE_MAX
         ? `DRONE — MAX (${drones.count()}/${DRONE_MAX})`
         : `HELPER DRONE — ${COST_DRONE} (${drones.count()}/${DRONE_MAX})`,
-      cost: COST_DRONE,
       can: scrap >= COST_DRONE && drones.count() < DRONE_MAX,
       act: () => { scrap -= COST_DRONE; drones.add(); sounds.pickup(); addFeedLine('DRONE ONLINE'); renderShop(); },
     },
   ];
+  if (!player.jetpack.owned) {
+    items.push({
+      label: `JETPACK — ${COST_JETPACK}`,
+      can: scrap >= COST_JETPACK,
+      act: () => {
+        scrap -= COST_JETPACK;
+        player.jetpack.owned = true;
+        player.jetpack.fuel = player.jetpack.maxFuel;
+        sounds.overclockUp();
+        addFeedLine('JETPACK EQUIPPED — HOLD SPACE IN AIR');
+        renderShop();
+      },
+    });
+  } else {
+    items.push({
+      label: jetFuelUps >= JET_UP_MAX
+        ? 'JET FUEL — MAX'
+        : `JET FUEL +50% — ${COST_JET_UP} (${jetFuelUps}/${JET_UP_MAX})`,
+      can: scrap >= COST_JET_UP && jetFuelUps < JET_UP_MAX,
+      act: () => {
+        scrap -= COST_JET_UP;
+        jetFuelUps++;
+        player.jetpack.maxFuel += 0.65;
+        sounds.pickup();
+        renderShop();
+      },
+    });
+    items.push({
+      label: jetThrustUps >= JET_UP_MAX
+        ? 'JET THRUST — MAX'
+        : `JET THRUST +20% — ${COST_JET_UP} (${jetThrustUps}/${JET_UP_MAX})`,
+      can: scrap >= COST_JET_UP && jetThrustUps < JET_UP_MAX,
+      act: () => {
+        scrap -= COST_JET_UP;
+        jetThrustUps++;
+        player.jetpack.thrust += 7.5;
+        sounds.pickup();
+        renderShop();
+      },
+    });
+  }
   for (const item of items) {
     const btn = document.createElement('button');
     btn.className = 'shop-btn' + (item.can ? '' : ' disabled');
@@ -450,6 +570,7 @@ function showUpgradeOffer(bossReward) {
   pendingBossOffer = !!bossReward;
   offerOpenedAt = performance.now();
   upgradeTitle.textContent = bossReward ? 'BOSS DOWN — CLAIM YOUR REWARD' : 'CHOOSE AN UPGRADE';
+  rollNewOffer();
   renderOffer();
   upgradeScreen.classList.remove('hidden');
   upgradeScreen.classList.add('locked');
@@ -544,7 +665,7 @@ document.addEventListener('pointerlockchange', () => {
     showOverlay(
       'PAUSED',
       `WAVE ${waveNum} · SCORE ${score.toLocaleString()} · SCRAP ${scrap}`,
-      'WASD move &middot; SHIFT sprint &middot; SPACE jump &middot; G grenade<br />RIGHT-CLICK aim &middot; Q / 1-2 switch weapon &middot; R reload',
+      'WASD move &middot; SHIFT sprint &middot; SPACE jump/jetpack &middot; G grenade<br />RIGHT-CLICK aim &middot; SCROLL or 1-2 weapons &middot; Q / E abilities &middot; R reload',
       'CLICK TO RESUME'
     );
   }
@@ -577,9 +698,8 @@ document.addEventListener('keydown', (e) => {
   if (state !== 'playing') return;
   if (e.code === 'KeyR') startReload();
   if (e.code === 'KeyG') throwGrenade();
-  if (e.code === 'KeyQ') {
-    switchWeapon(currentWeaponId === 'rifle' ? 'marksman' : 'rifle');
-  }
+  if (e.code === 'KeyQ' && waveState !== 'upgrade') abilities.activate('Q');
+  if (e.code === 'KeyE' && waveState !== 'upgrade') abilities.activate('E');
   if (/^Digit[1-2]$/.test(e.code)) {
     switchWeapon(WEAPON_ORDER[Number(e.code.slice(5)) - 1]);
   }
@@ -587,6 +707,11 @@ document.addEventListener('keydown', (e) => {
 document.addEventListener('keyup', (e) => {
   player.keys[e.code] = false;
 });
+document.addEventListener('wheel', (e) => {
+  if (state === 'playing' && document.pointerLockElement === canvas && Math.abs(e.deltaY) > 1) {
+    switchWeapon(currentWeaponId === 'rifle' ? 'marksman' : 'rifle');
+  }
+}, { passive: true });
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -617,10 +742,10 @@ function addKill(bot, part) {
   addFeedLine(`${bot.type.toUpperCase()} +${total}`);
   sounds.kill();
 
-  // multi-kill callouts
+  // multi-kill callouts (1.8s chain window, up to GODLIKE at 8+)
   const now = performance.now();
   killTimes.push(now);
-  while (killTimes.length && now - killTimes[0] > 1300) killTimes.shift();
+  while (killTimes.length && now - killTimes[0] > 1800) killTimes.shift();
   if (killTimes.length >= 2) showCallout(killTimes.length);
 
   if (bot.cfg.boss) {
@@ -639,7 +764,7 @@ const _botCenter = new THREE.Vector3();
 
 function startReload() {
   if (reloading || ammo() === magSize()) return;
-  if (stats.instantReload) {
+  if (stats.instantReload || abilities.overclockActive()) {
     setAmmo(magSize());
     sounds.reload();
     return;
@@ -889,7 +1014,9 @@ bots.onPlayerHit = (dmg, kind, sourceBot) => {
   }
   const final = Math.max(1, Math.round(dmg * (1 - stats.damageReduction)));
   vignetteAlpha = 0.85;
-  addShake(kind === 'shock' ? 1.3 : kind === 'melee' ? 0.7 : 0.35 + final / 60);
+  addShake(
+    kind === 'shock' || kind === 'blast' ? 1.3 : kind === 'melee' ? 0.7 : 0.35 + final / 60
+  );
   sounds.hurt();
   if (stats.adrenalSurge) surgeTimer = 3;
   const dead = player.takeDamage(final);
@@ -987,6 +1114,32 @@ function updateHUD(dt) {
     bossPanel.classList.add('hidden');
   }
 
+  // ability slots
+  for (const [slot, elBox] of [['Q', abilityQ], ['E', abilityE]]) {
+    const id = abilities.slots[slot];
+    const nameEl = elBox.querySelector('.ab-name');
+    const cdEl = elBox.querySelector('.ab-cd');
+    if (!id) {
+      nameEl.textContent = '—';
+      cdEl.textContent = '';
+      elBox.classList.add('empty');
+    } else {
+      elBox.classList.remove('empty');
+      nameEl.textContent = ABILITIES[id].name.toUpperCase();
+      const cd = abilities.cds[slot];
+      cdEl.textContent = cd > 0 ? Math.ceil(cd) : '';
+      elBox.classList.toggle('cooling', cd > 0);
+    }
+  }
+
+  // jetpack fuel
+  if (player.jetpack.owned) {
+    fuelWrap.classList.remove('hidden');
+    fuelBar.style.width = `${(player.jetpack.fuel / player.jetpack.maxFuel) * 100}%`;
+  } else {
+    fuelWrap.classList.add('hidden');
+  }
+
   hitmarkerTimer = Math.max(0, hitmarkerTimer - dt);
   hitmarker.style.opacity = hitmarkerTimer > 0 ? '1' : '0';
 
@@ -1028,6 +1181,17 @@ window.__game = {
     scrap(n) { scrap = n; },
     grenades(n) { grenadeCount = n; },
     addDrone() { return drones.add(); },
+    giveAbility(id, slot = 'Q') {
+      if (!ABILITIES[id]) return false;
+      abilities.assign(slot, id);
+      return true;
+    },
+    cast(slot) { return abilities.activate(slot); },
+    jetpack() {
+      player.jetpack.owned = true;
+      player.jetpack.fuel = player.jetpack.maxFuel;
+    },
+    abilities,
     roll: (w, boss) =>
       rollOffer(w ?? waveNum, ownedUniqueIds(), stats.offerSize, !!boss)
         .map((u) => ({ id: u.id, tier: u.tier })),
@@ -1048,9 +1212,27 @@ renderer.setAnimationLoop(() => {
       stats.speedMult *
       (adrenTimer > 0 ? 1 + 0.25 * stats.adrenaline : 1) *
       (berserkActive() ? 1.25 : 1) *
+      (abilities.overclockActive() ? 1.2 : 1) *
       (1 - adsT * 0.4);
 
+    abilities.update(dt);
+    bots.shield = abilities.shieldInfo();
+    bots.decoyPos = abilities.decoyPos();
+
     player.update(dt, world.obstacleBoxes);
+
+    // jetpack exhaust
+    if (player.jetting) {
+      jetSoundAcc -= dt;
+      if (jetSoundAcc <= 0) {
+        jetSoundAcc = 0.12;
+        sounds.jet();
+        effects.burst(
+          new THREE.Vector3(player.position.x, player.position.y - 1.5, player.position.z),
+          0xffb050, 4, 2.5, 0.25
+        );
+      }
+    }
 
     if (waveState === 'intermission') {
       interTimer -= dt;

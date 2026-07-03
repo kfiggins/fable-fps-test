@@ -24,6 +24,9 @@ export class Player {
     this.timeSinceHit = 999;
 
     this.lookScale = 1; // reduced while aiming down sights
+    // scrap-bought jetpack: hold Space in the air to thrust
+    this.jetpack = { owned: false, fuel: 0, maxFuel: 1.3, thrust: 38 };
+    this.jetting = false;
     // modded by upgrades (main syncs these from the run's stats)
     this.dynamicSpeedMult = 1;
     this.jumpMult = 1;
@@ -117,6 +120,17 @@ export class Player {
         this.airJumpUsed = true;
         if (this.onAirJump) this.onAirJump();
       }
+    }
+    // jetpack: hold Space while airborne
+    const jp = this.jetpack;
+    this.jetting = false;
+    if (jp.owned && k['Space'] && !this.onGround && jp.fuel > 0) {
+      this.velocity.y = Math.min(this.velocity.y + jp.thrust * dt, 10);
+      jp.fuel = Math.max(0, jp.fuel - dt);
+      this.jetting = true;
+    }
+    if (jp.owned && this.onGround && jp.fuel < jp.maxFuel) {
+      jp.fuel = Math.min(jp.maxFuel, jp.fuel + (jp.maxFuel / 2.5) * dt);
     }
     this.velocity.y -= GRAVITY * dt;
     pos.y += this.velocity.y * dt;
