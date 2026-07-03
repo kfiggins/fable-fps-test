@@ -1,4 +1,5 @@
 import { ABILITIES } from './abilities.js';
+import { deepFreeze } from './util.js';
 
 // Roguelike upgrade system. Every upgrade is pure data: it mutates the run's
 // `stats` object, and game code reads stats instead of constants. To add a new
@@ -226,3 +227,7 @@ export function rollOffer(wave, ownedUniques, count = 3, guaranteeLegendary = fa
   }
   return picks;
 }
+
+deepFreeze(TIERS);
+Object.freeze(UPGRADES);
+for (const u of UPGRADES) Object.freeze(u);

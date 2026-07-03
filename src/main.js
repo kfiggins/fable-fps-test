@@ -170,6 +170,7 @@ let bobTime = 0;
 // --- HUD elements ---
 const el = (id) => document.getElementById(id);
 const hudHealth = el('health-bar');
+const hudHealthLabel = el('health-label');
 const hudAmmo = el('ammo');
 const hudWeaponLabel = el('ammo-label');
 const hudGrenades = el('grenades');
@@ -332,9 +333,23 @@ function updateBuildStrip() {
 }
 
 const BEST_KEY = 'minifps-best';
+// best-score records are checksummed — hand-edited localStorage gets discarded
+function bestSig(s, w) {
+  let h = 2166136261 >>> 0;
+  const str = `mfps.v2|${s}|${w}|q7k2z`;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h.toString(36);
+}
 function loadBest() {
   try {
-    return JSON.parse(localStorage.getItem(BEST_KEY)) || { score: 0, wave: 0 };
+    const b = JSON.parse(localStorage.getItem(BEST_KEY));
+    if (!b || typeof b.score !== 'number' || b.sig !== bestSig(b.score, b.wave)) {
+      return { score: 0, wave: 0 };
+    }
+    return b;
   } catch {
     return { score: 0, wave: 0 };
   }
@@ -342,7 +357,10 @@ function loadBest() {
 function saveBest() {
   const best = loadBest();
   if (score > best.score) {
-    localStorage.setItem(BEST_KEY, JSON.stringify({ score, wave: waveNum }));
+    localStorage.setItem(
+      BEST_KEY,
+      JSON.stringify({ score, wave: waveNum, sig: bestSig(score, waveNum) })
+    );
   }
 }
 
@@ -1187,10 +1205,14 @@ function updateGun(dt) {
 
 // --- HUD ---
 function updateHUD(dt) {
-  const hpFrac = player.health / player.maxHealth;
-  hudHealth.style.width = `${Math.min(100, hpFrac * 100)}%`;
+  // while piloting, the main health bar IS the mech's integrity
+  const hpFrac = mech.active
+    ? mech.hp / mech.maxHp
+    : player.health / player.maxHealth;
+  hudHealthLabel.textContent = mech.active ? 'MECH INTEGRITY' : 'HEALTH';
+  hudHealth.style.width = `${Math.min(100, Math.max(0, hpFrac * 100))}%`;
   hudHealth.style.background =
-    hpFrac > 1.001
+    !mech.active && hpFrac > 1.001
       ? 'linear-gradient(90deg, #38bdf8, #7fe7ff)'
       : hpFrac > 0.4
         ? 'linear-gradient(90deg, #37d67a, #7ce7a5)'
@@ -1276,14 +1298,16 @@ function updateHUD(dt) {
 
   vignetteAlpha = Math.max(0, vignetteAlpha - dt * 1.6);
   let v = vignetteAlpha;
-  if (state === 'playing' && player.health < player.maxHealth * 0.35) {
+  if (state === 'playing' && hpFrac < 0.35) {
     v = Math.max(v, 0.3 + Math.sin(performance.now() / 160) * 0.12);
   }
   vignette.style.opacity = `${v}`;
 }
 
-// debug/testing handle
-window.__game = {
+// debug/testing handle — LOCAL DEV ONLY. On the hosted site nothing is
+// exposed on window, so all game state stays sealed in minified closures.
+const IS_DEV_HOST = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+if (IS_DEV_HOST) window.__game = {
   player, bots, camera, grenades, drones,
   get stats_() { return stats; },
   owned,

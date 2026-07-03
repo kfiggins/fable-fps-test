@@ -1,3 +1,4 @@
+import { deepFreeze } from './util.js';
 // Weapon roster: you carry both from the start. Roguelike stats apply
 // globally on top of these numbers.
 export const WEAPONS = {
@@ -18,3 +19,6 @@ export const WEAPONS = {
 };
 
 export const WEAPON_ORDER = ['rifle', 'marksman'];
+
+deepFreeze(WEAPONS);
+deepFreeze(WEAPON_ORDER);

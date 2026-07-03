@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { collideXZ, groundHeight, clampToArena } from './world.js';
+import { deepFreeze } from './util.js';
 
 // Type design: big pro ↔ big con.
 //  grunt  — balanced skirmisher; hunts cover when hurt
@@ -29,7 +30,7 @@ export const BOT_TYPES = {
     aimed: { dmg: 28, telegraph: 1.3, lockTime: 0.3, interval: [3.2, 4.4] },
   },
   warden: {
-    hp: 4500, speed: 2.4, scale: 2.2, points: 2000, color: 0x8a1f2d, visor: 0xffd24d,
+    hp: 2200, speed: 2.4, scale: 2.2, points: 2000, color: 0x8a1f2d, visor: 0xffd24d,
     ai: 'skirmish', range: [7, 16], wide: true, boss: true, name: 'THE WARDEN',
     burst: { n: 6, gap: 0.09, dmg: [6, 9], spread: 0.05, interval: [2.8, 3.6] },
     shock: { dmg: 30, radius: 7, trigger: 5.5, cd: 4.5 },
@@ -37,7 +38,7 @@ export const BOT_TYPES = {
     orbs: { n: 3, spread: 0.3, speed: 9, dmg: 25, interval: [5, 7] },
   },
   titan: {
-    hp: 10500, speed: 2.6, scale: 3, points: 5000, color: 0x2a1136, visor: 0xff3df0,
+    hp: 5200, speed: 2.6, scale: 3, points: 5000, color: 0x2a1136, visor: 0xff3df0,
     ai: 'skirmish', range: [8, 18], wide: true, boss: true, name: 'THE TITAN',
     burst: { n: 8, gap: 0.09, dmg: [7, 10], spread: 0.05, interval: [2.6, 3.4] },
     shock: { dmg: 40, radius: 8, trigger: 6.5, cd: 4 },
@@ -47,7 +48,7 @@ export const BOT_TYPES = {
     missiles: { n: 2, dmg: 30, radius: 3, interval: [9, 12] },
   },
   butcher: {
-    hp: 18500, speed: 4.2, scale: 2.4, points: 7000, color: 0x7a1500, visor: 0xff4444,
+    hp: 9200, speed: 4.2, scale: 2.4, points: 7000, color: 0x7a1500, visor: 0xff4444,
     ai: 'skirmish', range: [3, 9], wide: true, spike: true, boss: true, name: 'THE BUTCHER',
     burst: { n: 8, gap: 0.09, dmg: [8, 11], spread: 0.05, interval: [2.4, 3] },
     melee: { dmg: 22, range: 3.4, cd: 1.2 },
@@ -57,7 +58,7 @@ export const BOT_TYPES = {
     enrage: { below: 0.4, speed: 1.4, rate: 1.5 },
   },
   overlord: {
-    hp: 34000, speed: 2.8, scale: 3.6, points: 15000, color: 0x2b2005, visor: 0xffcc00,
+    hp: 17000, speed: 2.8, scale: 3.6, points: 15000, color: 0x2b2005, visor: 0xffcc00,
     ai: 'skirmish', range: [8, 18], wide: true, boss: true, name: 'THE OVERLORD',
     burst: { n: 10, gap: 0.08, dmg: [8, 12], spread: 0.05, interval: [2.2, 3] },
     shock: { dmg: 45, radius: 9, trigger: 7, cd: 3 },
@@ -69,7 +70,7 @@ export const BOT_TYPES = {
     enrage: { below: 0.35, speed: 1.5, rate: 1.6 },
   },
   phantom: {
-    hp: 42000, speed: 3.6, scale: 2, points: 30000, color: 0x3d4d5c, visor: 0x9fefff,
+    hp: 21000, speed: 3.6, scale: 2, points: 30000, color: 0x3d4d5c, visor: 0x9fefff,
     ai: 'skirmish', range: [10, 22], boss: true, name: 'THE PHANTOM',
     burst: { n: 5, gap: 0.09, dmg: [8, 11], spread: 0.045, interval: [2.4, 3.2] },
     aimed: { dmg: 45, telegraph: 0.8, lockTime: 0.25, interval: [5, 7] },
@@ -79,7 +80,7 @@ export const BOT_TYPES = {
     enrage: { below: 0.35, speed: 1.3, rate: 1.4 },
   },
   apex: {
-    hp: 65000, speed: 2.4, scale: 4, points: 60000, color: 0x101418, visor: 0xff2222,
+    hp: 32000, speed: 2.4, scale: 4, points: 60000, color: 0x101418, visor: 0xff2222,
     ai: 'skirmish', range: [9, 20], wide: true, boss: true, name: 'THE APEX',
     burst: { n: 12, gap: 0.07, dmg: [9, 13], spread: 0.05, interval: [2.2, 3] },
     shock: { dmg: 50, radius: 10, trigger: 8, cd: 3 },
@@ -1053,3 +1054,5 @@ export class BotManager {
     else this.sounds.botShoot();
   }
 }
+
+deepFreeze(BOT_TYPES);

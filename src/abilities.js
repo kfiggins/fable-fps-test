@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { deepFreeze } from './util.js';
 
 // Active abilities: acquired through upgrade cards, bound to Q / E.
 // Each entry: cooldown + tier; behavior lives in AbilityManager.
@@ -411,3 +412,5 @@ export class AbilityManager {
     }
   }
 }
+
+deepFreeze(ABILITIES);
