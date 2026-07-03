@@ -9,8 +9,8 @@ export const MECH = {
   hp: 1500,
   eye: 4.2, radius: 1.3, step: 1.2, speed: 8.5, jump: 12,
   gun: { dmg: 70, splash: 25, splashR: 2, interval: 0.09 },
-  rockets: { n: 6, dmg: 120, radius: 4.5, cd: 10 },
-  stomp: { dmg: 180, radius: 10, cd: 9 },
+  rockets: { n: 6, dmg: 120, radius: 4.5, cd: 18 },
+  stomp: { dmg: 180, radius: 14, cd: 9 },
 };
 
 export const MECH_ABILITIES = {
@@ -184,22 +184,28 @@ export class MechManager {
 
   cast(slot) {
     if (!this.active || this.cds[slot] > 0) return false;
-    if (slot === 'Q') this.castRockets();
-    else this.castStomp();
+    const ok = slot === 'Q' ? this.castRockets() : this.castStomp();
+    if (ok === false) return false;
     this.cds[slot] = MECH_ABILITIES[slot].cd;
     return true;
   }
 
+  // homing barrage: each rocket locks a DIFFERENT enemy
   castRockets() {
-    const { camera, world, sounds } = this.ctx;
+    const { camera, player, bots, sounds } = this.ctx;
     camera.getWorldPosition(_v1);
-    camera.getWorldDirection(_v2);
-    this.raycaster.set(_v1, _v2);
-    this.raycaster.far = 75;
-    const hits = this.raycaster.intersectObjects(world.solids, false);
-    const target = hits.length
-      ? hits[0].point.clone()
-      : _v1.clone().addScaledVector(_v2, 70);
+    const targets = bots.bots
+      .filter((b) => b.alive && b.group.position.distanceTo(player.position) < 80)
+      .sort(
+        (a, b) =>
+          a.group.position.distanceTo(player.position) -
+          b.group.position.distanceTo(player.position)
+      )
+      .slice(0, MECH.rockets.n);
+    if (!targets.length) {
+      sounds.empty();
+      return false; // nothing to lock — no cooldown
+    }
     for (let i = 0; i < MECH.rockets.n; i++) {
       const mesh = new THREE.Mesh(
         new THREE.ConeGeometry(0.15, 0.65, 8),
@@ -212,10 +218,10 @@ export class MechManager {
       this.ctx.scene.add(mesh);
       this.rockets.push({
         mesh,
-        target: target.clone().add(new THREE.Vector3((Math.random() - 0.5) * 5, 0, (Math.random() - 0.5) * 5)),
-        vel: new THREE.Vector3((Math.random() - 0.5) * 8, 11 + Math.random() * 3, (Math.random() - 0.5) * 8),
-        phase: 0.3 + i * 0.07,
-        life: 6,
+        targetBot: targets[i % targets.length], // round-robin across enemies
+        vel: new THREE.Vector3((Math.random() - 0.5) * 8, 12 + Math.random() * 3, (Math.random() - 0.5) * 8),
+        phase: 0.35 + i * 0.08,
+        life: 7,
         trail: 0,
       });
     }
@@ -277,14 +283,17 @@ export class MechManager {
       g.position.z = -1.05 + this.kick[side] * 0.12;
     }
 
-    // rockets
+    // homing rockets
     for (let i = this.rockets.length - 1; i >= 0; i--) {
       const r = this.rockets[i];
       r.life -= dt;
       r.phase -= dt;
-      if (r.phase <= 0) {
-        _v1.copy(r.target).sub(r.mesh.position).normalize().multiplyScalar(30);
-        r.vel.lerp(_v1, Math.min(1, dt * 4));
+      const t = r.targetBot;
+      if (r.phase <= 0 && t.alive) {
+        _v1.copy(t.group.position);
+        _v1.y += 0.9 * t.cfg.scale;
+        _v1.sub(r.mesh.position).normalize().multiplyScalar(32);
+        r.vel.lerp(_v1, Math.min(1, dt * 4.5));
       }
       r.mesh.position.addScaledVector(r.vel, dt);
       r.mesh.lookAt(r.mesh.position.clone().add(r.vel));
@@ -294,9 +303,13 @@ export class MechManager {
         r.trail = 0.07;
         effects.spark(r.mesh.position, 0xffaa66);
       }
-      let boom = r.life <= 0 || r.mesh.position.y < 0.12 ||
-        r.mesh.position.distanceTo(r.target) < 1.4;
-      if (!boom) {
+      let boom = r.life <= 0 || r.mesh.position.y < 0.12;
+      if (!boom && t.alive) {
+        _v1.copy(t.group.position);
+        _v1.y += 0.9 * t.cfg.scale;
+        if (r.mesh.position.distanceTo(_v1) < 1.3) boom = true;
+      }
+      if (!boom && r.phase <= 0) {
         for (const b of world.obstacleBoxes) {
           if (b.containsPoint(r.mesh.position)) {
             boom = true;
