@@ -34,7 +34,7 @@ Then open the printed URL (usually http://localhost:5173) and click to play.
 
 You carry the **rifle** (fast, reliable, iron sights) and the **marksman** (huge single
 shots, 3.75× scope) from the start. Enemies randomly drop **grenades** (bosses always
-drop two) and **scrap**. Grenades throw with G; scrap is currency.
+drop two) and **scrap**. Hold G to charge a longer grenade throw; scrap is currency.
 
 ## The roguelike layer
 
@@ -49,8 +49,9 @@ Rocket Barrage on Q and Titan Stomp on E. When it dies you eject and it's gone f
 (until the next 1000 scrap).
 
 **Abilities** appear in the upgrade pool as uncommon/rare/legendary cards and bind to
-**Q or E** (two slots — replace or skip freely): Healing Field, Grapple Claw,
-Bubble Shield (breaks under fire), Homing Missile, Shock Nova, Sweep Laser, Overclock.
+**Q or E** (two slots — replace or skip freely): Healing Field, Grapple Claw (3s cooldown,
+flings you up past your mark — roof-capable), Bubble Shield (breaks under fire),
+Homing Missile, Stasis Nova (freezes everything), Sweep Laser, Overclock.
 
 Synergies are the point: Vampire + Berserker, Pierce + High Ground, Cluster Bombs +
 Grenadier, Grapple Claw + High Ground, Golden Gun + Overclock…

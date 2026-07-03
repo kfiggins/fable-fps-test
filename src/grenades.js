@@ -47,14 +47,14 @@ export class GrenadeManager {
     this.pickups.push({ mesh, baseY, type, value, t: Math.random() * 10 });
   }
 
-  throwFrom(camera) {
+  throwFrom(camera, speed = THROW_SPEED) {
     const mesh = new THREE.Mesh(this.liveGeo, this.liveMat);
     camera.getWorldPosition(mesh.position);
     camera.getWorldDirection(_dir);
     mesh.position.addScaledVector(_dir, 0.6);
     mesh.position.y -= 0.15;
-    const vel = _dir.clone().multiplyScalar(THROW_SPEED);
-    vel.y += 4.5;
+    const vel = _dir.clone().multiplyScalar(speed);
+    vel.y += 3.5 + speed * 0.08;
     this.scene.add(mesh);
     this.live.push({ mesh, vel, fuse: FUSE, cluster: false });
   }

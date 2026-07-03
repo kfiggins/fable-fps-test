@@ -8,8 +8,8 @@ export const ABILITIES = {
     desc: 'Drop a green zone that heals 12/s while you stand in it (8s).',
   },
   grapple: {
-    id: 'grapple', name: 'Grapple Claw', tier: 'rare', cd: 8,
-    desc: 'Fire a claw where you aim — it yanks you there with a boost up.',
+    id: 'grapple', name: 'Grapple Claw', tier: 'rare', cd: 3,
+    desc: 'Fire a claw where you aim — a fast pull that flings you up over the mark.',
   },
   bubble: {
     id: 'bubble', name: 'Bubble Shield', tier: 'rare', cd: 26,
@@ -20,8 +20,8 @@ export const ABILITIES = {
     desc: 'Launch a missile that dives onto the enemy nearest your crosshair.',
   },
   nova: {
-    id: 'nova', name: 'Shock Nova', tier: 'rare', cd: 12,
-    desc: 'Blast everything within 6m: 60 damage, knockback, brief stun.',
+    id: 'nova', name: 'Stasis Nova', tier: 'rare', cd: 30,
+    desc: 'Freeze every enemy in place for 8s (bosses 2s).',
   },
   sweeplaser: {
     id: 'sweeplaser', name: 'Sweep Laser', tier: 'legendary', cd: 25,
@@ -154,13 +154,22 @@ export class AbilityManager {
     camera.getWorldPosition(_v1);
     camera.getWorldDirection(_v2);
     this.raycaster.set(_v1, _v2);
-    this.raycaster.far = 34;
+    this.raycaster.far = 50;
     const hits = this.raycaster.intersectObjects(world.solids, false);
     if (!hits.length) {
       this.ctx.sounds.empty();
       return false; // no anchor — no cooldown
     }
-    this.grapple = { point: hits[0].point.clone(), t: 0.9 };
+    const anchor = hits[0].point.clone();
+    // aim above AND past the mark, so anchoring a wall edge carries you onto the roof
+    const past = new THREE.Vector3(anchor.x - _v1.x, 0, anchor.z - _v1.z);
+    if (past.lengthSq() > 0.01) past.normalize().multiplyScalar(2.6);
+    this.grapple = {
+      anchor,
+      target: anchor.clone().add(past).add(new THREE.Vector3(0, 2.8, 0)),
+      t: 1.8,
+      lastD: Infinity,
+    };
     this.ctx.sounds.grapple();
   }
 
@@ -222,26 +231,16 @@ export class AbilityManager {
   }
 
   cast_nova() {
-    const { player, bots, effects, sounds, dealDamage, addShake } = this.ctx;
+    const { player, bots, effects, sounds, addShake, addFeedLine } = this.ctx;
     const origin = player.position.clone();
     origin.y -= 1.2;
-    effects.shockwave(origin, 6, 0x9fd8ff);
-    effects.explosion(origin, 0x9fd8ff, 1.2);
-    addShake(0.8);
+    effects.shockwave(origin, 40, 0x7fd8ff);
+    effects.explosion(player.position.clone(), 0x7fd8ff, 1.2);
+    addShake(0.6);
+    sounds.bubble();
     sounds.shockwave();
-    for (const b of [...bots.bots]) {
-      if (!b.alive) continue;
-      _v1.copy(b.group.position).sub(origin);
-      _v1.y = 0;
-      const d = _v1.length();
-      if (d > 6) continue;
-      const died = dealDamage(b, 60, 'body', { source: 'other', depth: 1 });
-      if (!died) {
-        _v1.normalize();
-        b.group.position.addScaledVector(_v1, 4);
-        b.stunTimer = 1;
-      }
-    }
+    bots.freezeAll(8, 2);
+    addFeedLine('STASIS — ENEMIES FROZEN');
   }
 
   cast_sweeplaser() {
@@ -276,14 +275,20 @@ export class AbilityManager {
     if (this.grapple) {
       const g = this.grapple;
       g.t -= dt;
-      _v1.copy(g.point).sub(player.position);
+      _v1.copy(g.target).sub(player.position);
       const d = _v1.length();
-      if (g.t <= 0 || d < 1.6) {
+      // "passed" = we stopped closing on the target (arrived, or geometry stalled us)
+      const passed = d > g.lastD + 0.02;
+      g.lastD = Math.min(g.lastD, d);
+      if (g.t <= 0 || d < 1.6 || passed) {
+        // fling past and above the mark so you can steer onto rooftops
+        if (d > 0.01) _v1.divideScalar(d);
+        player.velocity.set(_v1.x * 14, Math.max(player.velocity.y * 0.25, 0) + 7, _v1.z * 14);
         this.endGrapple();
       } else {
         _v1.divideScalar(d);
-        player.velocity.set(_v1.x * 24, _v1.y * 24 + 5, _v1.z * 24);
-        effects.tracer(player.position.clone().add(new THREE.Vector3(0, -0.3, 0)), g.point, 0xd8dde5);
+        player.velocity.set(_v1.x * 36, _v1.y * 36 + 2.5, _v1.z * 36);
+        effects.tracer(player.position.clone().add(new THREE.Vector3(0, -0.3, 0)), g.anchor, 0xd8dde5);
       }
     }
 

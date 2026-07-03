@@ -259,6 +259,7 @@ let currentWeaponId = 'rifle';
 const weaponAmmo = { rifle: WEAPONS.rifle.mag, marksman: WEAPONS.marksman.mag };
 let grenadeCount = 1;
 let grenadeCd = 0;
+let grenadeChargeT = -1; // >= 0 while G is held (charging a throw)
 
 // --- run stats (end screen) ---
 let run = null;
@@ -760,7 +761,7 @@ document.addEventListener('keydown', (e) => {
   }
   if (state !== 'playing') return;
   if (e.code === 'KeyR' && !mech.active) startReload();
-  if (e.code === 'KeyG') throwGrenade();
+  if (e.code === 'KeyG' && !e.repeat) startGrenadeCharge();
   if (e.code === 'KeyQ' && waveState !== 'upgrade') {
     if (mech.active) mech.cast('Q');
     else abilities.activate('Q');
@@ -775,6 +776,7 @@ document.addEventListener('keydown', (e) => {
 });
 document.addEventListener('keyup', (e) => {
   player.keys[e.code] = false;
+  if (e.code === 'KeyG') releaseGrenade();
 });
 document.addEventListener('wheel', (e) => {
   if (state === 'playing' && !mech.active && document.pointerLockElement === canvas && Math.abs(e.deltaY) > 1) {
@@ -1036,13 +1038,25 @@ function tryShoot() {
   if (ammo() === 0) startReload();
 }
 
-// --- grenades ---
-function throwGrenade() {
-  if (grenadeCount <= 0 || grenadeCd > 0 || waveState === 'upgrade') return;
+// --- grenades: hold G to charge, release to throw farther ---
+const GRENADE_MIN_SPEED = 13;
+const GRENADE_MAX_SPEED = 30;
+const GRENADE_CHARGE_TIME = 1.1;
+
+function startGrenadeCharge() {
+  if (grenadeCount <= 0 || grenadeCd > 0 || waveState === 'upgrade' || grenadeChargeT >= 0) return;
+  grenadeChargeT = 0;
+}
+
+function releaseGrenade() {
+  if (grenadeChargeT < 0) return;
+  const power = Math.min(1, grenadeChargeT / GRENADE_CHARGE_TIME);
+  grenadeChargeT = -1;
+  if (grenadeCount <= 0 || waveState === 'upgrade' || state !== 'playing') return;
   grenadeCount--;
   grenadeCd = 0.5;
   run.grenadesThrown++;
-  grenades.throwFrom(camera);
+  grenades.throwFrom(camera, GRENADE_MIN_SPEED + (GRENADE_MAX_SPEED - GRENADE_MIN_SPEED) * power);
   sounds.empty();
 }
 
@@ -1183,7 +1197,10 @@ function updateHUD(dt) {
         : 'linear-gradient(90deg, #d63737, #e77c7c)';
   hudAmmo.textContent = mech.active ? '∞' : reloading ? '···' : `${ammo()}`;
   hudWeaponLabel.textContent = mech.active ? 'MECH CANNONS' : `${weapon().name} · R RELOAD`;
-  hudGrenades.textContent = `GRENADES ×${grenadeCount} · G THROW`;
+  hudGrenades.textContent =
+    grenadeChargeT >= 0
+      ? `THROW POWER ${Math.round(Math.min(1, grenadeChargeT / GRENADE_CHARGE_TIME) * 100)}%`
+      : `GRENADES ×${grenadeCount} · HOLD G`;
   hudScore.textContent = score.toLocaleString();
   hudScrap.textContent = `SCRAP ${scrap}`;
   hudMult.textContent = `×${comboMult}`;
@@ -1327,6 +1344,7 @@ renderer.setAnimationLoop(() => {
     surgeTimer = Math.max(0, surgeTimer - dt);
     invulnTimer = Math.max(0, invulnTimer - dt);
     grenadeCd = Math.max(0, grenadeCd - dt);
+    if (grenadeChargeT >= 0) grenadeChargeT += dt;
     player.dynamicSpeedMult =
       stats.speedMult *
       (adrenTimer > 0 ? 1 + 0.25 * stats.adrenaline : 1) *

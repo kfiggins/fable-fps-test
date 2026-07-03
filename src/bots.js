@@ -334,8 +334,18 @@ export class BotManager {
 
   setFlash(bot, amount) {
     for (const m of bot.flashMats) {
-      if (amount === 0 && bot.enraged) m.emissive.setRGB(0.45, 0.04, 0.04);
+      if (amount === 0 && bot.stunTimer > 0.2) m.emissive.setRGB(0.12, 0.38, 0.65); // frozen
+      else if (amount === 0 && bot.enraged) m.emissive.setRGB(0.45, 0.04, 0.04);
       else m.emissive.setRGB(amount, amount, amount);
+    }
+  }
+
+  // Stasis Nova: freeze everything (bosses shrug most of it off)
+  freezeAll(duration, bossDuration) {
+    for (const b of this.bots) {
+      if (!b.alive) continue;
+      b.stunTimer = Math.max(b.stunTimer, b.cfg.boss ? bossDuration : duration);
+      this.setFlash(b, 0);
     }
   }
 
@@ -573,7 +583,10 @@ export class BotManager {
     // Decoy redirects aim and movement; real hits still resolve vs the player
     const targetPos = this.decoyPos || playerPos;
     const stunned = bot.stunTimer > 0;
-    if (stunned) bot.stunTimer -= dt;
+    if (stunned) {
+      bot.stunTimer -= dt;
+      if (bot.stunTimer <= 0) this.setFlash(bot, 0); // thaw the icy tint
+    }
 
     _toPlayer.set(targetPos.x - pos.x, 0, targetPos.z - pos.z);
     const dist = _toPlayer.length();
