@@ -228,6 +228,10 @@ export class BotManager {
     this.shield = null; // player Bubble Shield: { center, radius }
     this.decoyPos = null; // player Decoy: bots aim here instead
     this.onShieldHit = null; // (dmg, point) => {}
+    // player target profile — grows while piloting the mech
+    this.playerEye = 1.7;
+    this.playerBodyOffset = 0.35;
+    this.playerHitRadius = 0.5;
   }
 
   hpMult() {
@@ -445,8 +449,8 @@ export class BotManager {
       // direct hit on the player
       if (!remove && !detonate) {
         _v.copy(player.position);
-        _v.y -= 0.35;
-        if (p.mesh.position.distanceTo(_v) < 0.85) {
+        _v.y -= this.playerBodyOffset;
+        if (p.mesh.position.distanceTo(_v) < this.playerHitRadius + 0.35) {
           if (this.onPlayerHit) this.onPlayerHit(p.dmg, 'blast', null);
           detonate = true;
         }
@@ -469,9 +473,9 @@ export class BotManager {
           this.effects.explosion(p.mesh.position, 0xff8833, 1.2);
           this.sounds.cannon();
           _v.copy(player.position);
-          _v.y -= 0.35;
+          _v.y -= this.playerBodyOffset;
           const d = p.mesh.position.distanceTo(_v);
-          if (d < p.radius && d >= 0.85 && this.onPlayerHit) {
+          if (d < p.radius && d >= this.playerHitRadius + 0.35 && this.onPlayerHit) {
             this.onPlayerHit(Math.round(p.dmg * 0.7), 'blast', null);
           }
         } else {
@@ -535,7 +539,7 @@ export class BotManager {
         this.sounds.explosionBig();
         const dx = player.position.x - s.x;
         const dz = player.position.z - s.z;
-        const feet = player.position.y - 1.7;
+        const feet = player.position.y - this.playerEye;
         if (Math.hypot(dx, dz) < s.radius && Math.abs(feet - s.y) < 2.5 && this.onPlayerHit) {
           this.onPlayerHit(s.dmg, 'blast', null);
         }
@@ -743,7 +747,7 @@ export class BotManager {
 
     if (cfg.melee) {
       bot.meleeTimer -= dt;
-      const vertGap = Math.abs(playerPos.y - 1.7 - pos.y);
+      const vertGap = Math.abs(playerPos.y - this.playerEye - pos.y);
       if (realDist < cfg.melee.range && vertGap < 1.2 && bot.meleeTimer <= 0) {
         bot.meleeTimer = cfg.melee.cd / (bot.enraged ? cfg.enrage.rate : 1);
         bot.meleePulse = 0.18;
@@ -755,7 +759,7 @@ export class BotManager {
 
     if (cfg.shock) {
       bot.shockTimer -= dt;
-      const vertGap = Math.abs(playerPos.y - 1.7 - pos.y);
+      const vertGap = Math.abs(playerPos.y - this.playerEye - pos.y);
       if (bot.shockTimer <= 0 && realDist < cfg.shock.trigger && vertGap < 2) {
         bot.shockTimer = cfg.shock.cd;
         this.effects.shockwave(pos, cfg.shock.radius);
@@ -1005,17 +1009,17 @@ export class BotManager {
     }
 
     _closest.copy(player.position);
-    _closest.y -= 0.35;
+    _closest.y -= this.playerBodyOffset;
     const t = _closest.sub(_muzzle).dot(_aim);
     let playerHit = false;
     if (t > 0 && t < occDist) {
       _closest.copy(_muzzle).addScaledVector(_aim, t);
       const radial = Math.hypot(
         _closest.x - player.position.x,
-        _closest.y - (player.position.y - 0.35),
+        _closest.y - (player.position.y - this.playerBodyOffset),
         _closest.z - player.position.z
       );
-      playerHit = radial < PLAYER_HIT_RADIUS;
+      playerHit = radial < this.playerHitRadius;
     }
 
     if (playerHit) {

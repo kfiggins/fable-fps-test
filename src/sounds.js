@@ -228,6 +228,22 @@ export class Sounds {
     this.noise(0.09, 0.12);
   }
 
+  mechUp() {
+    this.sweep('sawtooth', 60, 220, 0.7, 0.5);
+    this.sweep('square', 120, 440, 0.6, 0.3, 0.25);
+    this.noise(0.4, 0.3, 0.1);
+  }
+
+  mechShot() {
+    this.sweep('square', 210, 60, 0.09, 0.4);
+    this.noise(0.05, 0.3);
+  }
+
+  mechStep() {
+    this.sweep('sine', 70, 38, 0.16, 0.5);
+    this.noise(0.08, 0.25);
+  }
+
   victory() {
     this.sweep('sine', 520, 520, 0.14, 0.4);
     this.sweep('sine', 660, 660, 0.14, 0.4, 0.15);

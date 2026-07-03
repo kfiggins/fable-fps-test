@@ -73,8 +73,8 @@ export class GrenadeManager {
   }
 
   // onPickup(type, value) -> true if collected; onExplode(position, isCluster)
-  update(dt, playerPos, obstacleBoxes, onPickup, onExplode) {
-    const playerFeet = playerPos.y - 1.7;
+  update(dt, playerPos, playerEye, obstacleBoxes, onPickup, onExplode) {
+    const playerFeet = playerPos.y - playerEye;
     for (let i = this.pickups.length - 1; i >= 0; i--) {
       const p = this.pickups[i];
       p.t += dt;

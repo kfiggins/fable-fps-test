@@ -24,6 +24,13 @@ export class Player {
     this.timeSinceHit = 999;
 
     this.lookScale = 1; // reduced while aiming down sights
+    // body profile — the mech swaps these while piloting
+    this.eye = EYE_HEIGHT;
+    this.radius = RADIUS;
+    this.stepH = STEP_HEIGHT;
+    this.baseSpeed = WALK_SPEED;
+    this.jumpSpeed = JUMP_SPEED;
+    this.canSprint = true;
     // scrap-bought jetpack: hold Space in the air to thrust
     this.jetpack = { owned: false, fuel: 0, maxFuel: 1.3, thrust: 38 };
     this.jetting = false;
@@ -41,7 +48,7 @@ export class Player {
   }
 
   reset() {
-    this.camera.position.set(16, EYE_HEIGHT, 16);
+    this.camera.position.set(16, this.eye, 16);
     this.camera.rotation.set(0, -Math.PI / 4, 0);
     this.velocity.set(0, 0, 0);
     this.health = this.maxHealth;
@@ -76,7 +83,7 @@ export class Player {
 
   jumpVelocity() {
     // jump height scales with v², so +10% height = ×√1.1 velocity
-    return JUMP_SPEED * Math.sqrt(this.jumpMult);
+    return this.jumpSpeed * Math.sqrt(this.jumpMult);
   }
 
   update(dt, obstacleBoxes) {
@@ -93,8 +100,8 @@ export class Player {
     if (_wish.lengthSq() > 1) _wish.normalize();
 
     const speed =
-      WALK_SPEED *
-      (k['ShiftLeft'] || k['ShiftRight'] ? SPRINT_MULT : 1) *
+      this.baseSpeed *
+      (this.canSprint && (k['ShiftLeft'] || k['ShiftRight']) ? SPRINT_MULT : 1) *
       this.dynamicSpeedMult;
     const blend = Math.min(1, dt * 12);
     this.velocity.x += (_wish.x * speed - this.velocity.x) * blend;
@@ -105,8 +112,8 @@ export class Player {
     // horizontal move + collision (boxes within step height don't block)
     pos.x += this.velocity.x * dt;
     pos.z += this.velocity.z * dt;
-    clampToArena(pos, RADIUS);
-    collideXZ(pos, RADIUS, pos.y - EYE_HEIGHT, pos.y + 0.2, obstacleBoxes, STEP_HEIGHT);
+    clampToArena(pos, this.radius);
+    collideXZ(pos, this.radius, pos.y - this.eye, pos.y + 0.2, obstacleBoxes, this.stepH);
 
     // vertical move
     if (k['Space'] && this.onGround) {
@@ -141,8 +148,8 @@ export class Player {
         if (b.min.y < 0.5) continue; // grounded boxes are walls, not ceilings
         if (pos.y >= b.min.y + 0.3 || pos.y + 0.45 <= b.min.y) continue;
         if (
-          pos.x < b.min.x - RADIUS * 0.5 || pos.x > b.max.x + RADIUS * 0.5 ||
-          pos.z < b.min.z - RADIUS * 0.5 || pos.z > b.max.z + RADIUS * 0.5
+          pos.x < b.min.x - this.radius * 0.5 || pos.x > b.max.x + this.radius * 0.5 ||
+          pos.z < b.min.z - this.radius * 0.5 || pos.z > b.max.z + this.radius * 0.5
         ) continue;
         pos.y = Math.min(pos.y, b.min.y - 0.25);
         this.velocity.y = 0;
@@ -150,15 +157,15 @@ export class Player {
       }
     }
 
-    const feet = pos.y - EYE_HEIGHT;
-    const support = groundHeight(pos, RADIUS * 0.6, feet, obstacleBoxes, STEP_HEIGHT);
+    const feet = pos.y - this.eye;
+    const support = groundHeight(pos, this.radius * 0.6, feet, obstacleBoxes, this.stepH);
     if (feet < support - 0.001 && this.velocity.y <= 0.01) {
       // stepped into higher ground (stairs) — climb up smoothly
-      pos.y = Math.min(support + EYE_HEIGHT, pos.y + 14 * dt);
+      pos.y = Math.min(support + this.eye, pos.y + 14 * dt);
       this.velocity.y = 0;
       this.onGround = true;
     } else if (this.velocity.y <= 0 && feet <= support + 0.05) {
-      pos.y = support + EYE_HEIGHT;
+      pos.y = support + this.eye;
       this.velocity.y = 0;
       this.onGround = true;
     } else {

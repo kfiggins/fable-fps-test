@@ -9,6 +9,7 @@ import { WEAPONS, WEAPON_ORDER } from './weapons.js';
 import { GrenadeManager } from './grenades.js';
 import { DroneManager, DRONE_MAX } from './drone.js';
 import { ABILITIES, AbilityManager } from './abilities.js';
+import { MECH, MECH_ABILITIES, MechManager } from './mech.js';
 
 const BASE_FOV = 75;
 const LONGSHOT_DIST = 25;
@@ -106,6 +107,25 @@ const abilities = new AbilityManager({
   addShake: (a) => addShake(a),
 });
 bots.onShieldHit = (dmg, point) => abilities.onShieldHit(dmg, point);
+const mech = new MechManager({
+  scene, camera, player, bots, world, effects, sounds,
+  dealDamage: (...a) => dealDamage(...a),
+  addShake: (a) => addShake(a),
+  addFeedLine: (t) => addFeedLine(t),
+  setInvuln: (t) => { invulnTimer = Math.max(invulnTimer, t); },
+  onEnter: () => {
+    viewmodels[currentWeaponId].visible = false;
+    cockpit.classList.remove('hidden');
+    aiming = false;
+    reloading = false;
+    if (waveState === 'upgrade') renderShop();
+  },
+  onExit: () => {
+    viewmodels[currentWeaponId].visible = true;
+    cockpit.classList.add('hidden');
+    if (waveState === 'upgrade') renderShop();
+  },
+});
 
 // --- weapon viewmodels ---
 const gunMat = new THREE.MeshStandardMaterial({ color: 0x2f3138, roughness: 0.5, metalness: 0.4 });
@@ -187,6 +207,8 @@ const fuelWrap = el('fuel-bar-bg');
 const fuelBar = el('fuel-bar');
 const armorWrap = el('armor-bar-bg');
 const armorBar = el('armor-bar');
+const cockpit = el('cockpit');
+const mechHpBar = el('mech-hp');
 
 // --- game state ---
 let state = 'menu';
@@ -243,7 +265,7 @@ let run = null;
 function freshRunStats() {
   return {
     shotsFired: 0, shotsHit: 0, damageDealt: 0,
-    killsBy: { rifle: 0, marksman: 0, grenade: 0, drone: 0, other: 0 },
+    killsBy: { rifle: 0, marksman: 0, grenade: 0, drone: 0, mech: 0, other: 0 },
     headshotKills: 0, grenadesThrown: 0, scrapEarned: 0, maxCombo: 1,
   };
 }
@@ -285,7 +307,7 @@ function syncStats() {
   player.maxHealth = newMax;
   player.health = Math.min(player.health, healCap());
   player.jumpMult = stats.jumpMult;
-  player.canDoubleJump = stats.doubleJump;
+  player.canDoubleJump = stats.doubleJump && !mech.active;
   player.regenDelay = stats.regenDelay;
   player.regenRate = stats.regenRate;
   bots.speedScale = stats.enemySlow;
@@ -391,6 +413,7 @@ function startGame() {
   grenadeCd = 0;
   grenades.clear();
   drones.clear();
+  if (mech.active) mech.exit(false);
   abilities.reset();
   bots.shield = null;
   bots.decoyPos = null;
@@ -538,11 +561,21 @@ function renderShop() {
         renderShop();
       },
     },
+    {
+      label: mech.active ? 'MECH — ACTIVE' : `MECH — ${MECH.cost}`,
+      can: scrap >= MECH.cost && !mech.active,
+      act: () => {
+        scrap -= MECH.cost;
+        mech.enter();
+        renderShop();
+      },
+    },
   ];
-  if (!player.jetpack.owned) {
+  const jetOwned = mech.active ? mech.backup?.jetpack.owned : player.jetpack.owned;
+  if (!jetOwned) {
     items.push({
       label: `JETPACK — ${COST_JETPACK}`,
-      can: scrap >= COST_JETPACK,
+      can: scrap >= COST_JETPACK && !mech.active,
       act: () => {
         scrap -= COST_JETPACK;
         player.jetpack.owned = true;
@@ -553,11 +586,12 @@ function renderShop() {
       },
     });
   } else {
+    // while piloting, player.jetpack is the mech's — don't let upgrades touch it
     items.push({
       label: jetFuelUps >= JET_UP_MAX
         ? 'JET FUEL — MAX'
         : `JET FUEL +50% — ${COST_JET_UP} (${jetFuelUps}/${JET_UP_MAX})`,
-      can: scrap >= COST_JET_UP && jetFuelUps < JET_UP_MAX,
+      can: scrap >= COST_JET_UP && jetFuelUps < JET_UP_MAX && !mech.active,
       act: () => {
         scrap -= COST_JET_UP;
         jetFuelUps++;
@@ -570,7 +604,7 @@ function renderShop() {
       label: jetThrustUps >= JET_UP_MAX
         ? 'JET THRUST — MAX'
         : `JET THRUST +20% — ${COST_JET_UP} (${jetThrustUps}/${JET_UP_MAX})`,
-      can: scrap >= COST_JET_UP && jetThrustUps < JET_UP_MAX,
+      can: scrap >= COST_JET_UP && jetThrustUps < JET_UP_MAX && !mech.active,
       act: () => {
         scrap -= COST_JET_UP;
         jetThrustUps++;
@@ -638,7 +672,7 @@ function runStatsHtml() {
   return `
     <div class="stat-row"><span>ACCURACY</span><span>${acc}%</span></div>
     <div class="stat-row"><span>DAMAGE DEALT</span><span>${Math.round(run.damageDealt).toLocaleString()}</span></div>
-    <div class="stat-row"><span>KILLS</span><span>rifle ${kb.rifle} · marksman ${kb.marksman} · grenade ${kb.grenade} · drone ${kb.drone}${kb.other ? ` · other ${kb.other}` : ''}</span></div>
+    <div class="stat-row"><span>KILLS</span><span>rifle ${kb.rifle} · marksman ${kb.marksman} · grenade ${kb.grenade} · drone ${kb.drone}${kb.mech ? ` · mech ${kb.mech}` : ''}${kb.other ? ` · other ${kb.other}` : ''}</span></div>
     <div class="stat-row"><span>HEADSHOT KILLS</span><span>${run.headshotKills}</span></div>
     <div class="stat-row"><span>BEST COMBO</span><span>×${run.maxCombo}</span></div>
     <div class="stat-row"><span>SCRAP EARNED</span><span>${run.scrapEarned}</span></div>
@@ -725,11 +759,17 @@ document.addEventListener('keydown', (e) => {
     if (!e.repeat) player.wantJump = true;
   }
   if (state !== 'playing') return;
-  if (e.code === 'KeyR') startReload();
+  if (e.code === 'KeyR' && !mech.active) startReload();
   if (e.code === 'KeyG') throwGrenade();
-  if (e.code === 'KeyQ' && waveState !== 'upgrade') abilities.activate('Q');
-  if (e.code === 'KeyE' && waveState !== 'upgrade') abilities.activate('E');
-  if (/^Digit[1-2]$/.test(e.code)) {
+  if (e.code === 'KeyQ' && waveState !== 'upgrade') {
+    if (mech.active) mech.cast('Q');
+    else abilities.activate('Q');
+  }
+  if (e.code === 'KeyE' && waveState !== 'upgrade') {
+    if (mech.active) mech.cast('E');
+    else abilities.activate('E');
+  }
+  if (/^Digit[1-2]$/.test(e.code) && !mech.active) {
     switchWeapon(WEAPON_ORDER[Number(e.code.slice(5)) - 1]);
   }
 });
@@ -737,7 +777,7 @@ document.addEventListener('keyup', (e) => {
   player.keys[e.code] = false;
 });
 document.addEventListener('wheel', (e) => {
-  if (state === 'playing' && document.pointerLockElement === canvas && Math.abs(e.deltaY) > 1) {
+  if (state === 'playing' && !mech.active && document.pointerLockElement === canvas && Math.abs(e.deltaY) > 1) {
     switchWeapon(currentWeaponId === 'rifle' ? 'marksman' : 'rifle');
   }
 }, { passive: true });
@@ -1034,6 +1074,14 @@ bots.onBossEnraged = (bot) => {
 
 bots.onPlayerHit = (dmg, kind, sourceBot) => {
   if (invulnTimer > 0) return;
+  // piloting: the mech soaks everything, raw — no player mitigations
+  if (mech.active) {
+    vignetteAlpha = Math.max(vignetteAlpha, 0.4);
+    addShake(kind === 'shock' || kind === 'blast' ? 0.9 : 0.25);
+    sounds.hit();
+    mech.damage(dmg);
+    return;
+  }
   if (kind === 'shock' && stats.shockImmune) {
     addFeedLine('SLAM BLOCKED');
     return;
@@ -1081,6 +1129,14 @@ player.onAirJump = () => {
 
 // --- gun animation + aim-down-sights ---
 function updateGun(dt) {
+  if (mech.active) {
+    adsT += (0 - adsT) * Math.min(1, dt * 12);
+    scopeOverlay.style.opacity = '0';
+    crosshair.style.opacity = '1';
+    fovCurrent += (82 - fovCurrent) * Math.min(1, dt * 8); // wider mech view
+    player.lookScale = 1;
+    return;
+  }
   const w = weapon();
   const wantAds = aiming && !!w.zoomFov && state === 'playing' && waveState !== 'upgrade';
   adsT += ((wantAds ? 1 : 0) - adsT) * Math.min(1, dt * 12);
@@ -1125,8 +1181,8 @@ function updateHUD(dt) {
       : hpFrac > 0.4
         ? 'linear-gradient(90deg, #37d67a, #7ce7a5)'
         : 'linear-gradient(90deg, #d63737, #e77c7c)';
-  hudAmmo.textContent = reloading ? '···' : `${ammo()}`;
-  hudWeaponLabel.textContent = `${weapon().name} · R RELOAD`;
+  hudAmmo.textContent = mech.active ? '∞' : reloading ? '···' : `${ammo()}`;
+  hudWeaponLabel.textContent = mech.active ? 'MECH CANNONS' : `${weapon().name} · R RELOAD`;
   hudGrenades.textContent = `GRENADES ×${grenadeCount} · G THROW`;
   hudScore.textContent = score.toLocaleString();
   hudScrap.textContent = `SCRAP ${scrap}`;
@@ -1151,11 +1207,19 @@ function updateHUD(dt) {
     bossPanel.classList.add('hidden');
   }
 
-  // ability slots
+  // ability slots (mech overrides with its own loadout while piloting)
   for (const [slot, elBox] of [['Q', abilityQ], ['E', abilityE]]) {
-    const id = abilities.slots[slot];
     const nameEl = elBox.querySelector('.ab-name');
     const cdEl = elBox.querySelector('.ab-cd');
+    if (mech.active) {
+      elBox.classList.remove('empty');
+      nameEl.textContent = MECH_ABILITIES[slot].name;
+      const cd = mech.cds[slot];
+      cdEl.textContent = cd > 0 ? Math.ceil(cd) : '';
+      elBox.classList.toggle('cooling', cd > 0);
+      continue;
+    }
+    const id = abilities.slots[slot];
     if (!id) {
       nameEl.textContent = '—';
       cdEl.textContent = '';
@@ -1167,6 +1231,11 @@ function updateHUD(dt) {
       cdEl.textContent = cd > 0 ? Math.ceil(cd) : '';
       elBox.classList.toggle('cooling', cd > 0);
     }
+  }
+
+  // mech integrity
+  if (mech.active) {
+    mechHpBar.style.width = `${(mech.hp / mech.maxHp) * 100}%`;
   }
 
   // armor
@@ -1227,6 +1296,9 @@ window.__game = {
     grenades(n) { grenadeCount = n; },
     armor(n) { armor = n; },
     getArmor: () => armor,
+    mech() { if (!mech.active) mech.enter(); },
+    mechState: () => (mech.active ? { hp: mech.hp, maxHp: mech.maxHp, cds: { ...mech.cds } } : null),
+    mechDamage(n) { mech.damage(n); },
     addDrone() { return drones.add(); },
     giveAbility(id, slot = 'Q') {
       if (!ABILITIES[id]) return false;
@@ -1295,6 +1367,7 @@ renderer.setAnimationLoop(() => {
     grenades.update(
       dt,
       player.position,
+      player.eye,
       world.obstacleBoxes,
       (type, value) => {
         if (type === 'scrap') {
@@ -1326,7 +1399,11 @@ renderer.setAnimationLoop(() => {
         setAmmo(magSize());
       }
     }
-    if (firing && waveState !== 'upgrade') tryShoot();
+    mech.update(dt);
+    if (firing && waveState !== 'upgrade') {
+      if (mech.active) mech.tryShoot();
+      else tryShoot();
+    }
     updateGun(dt);
 
     if (player.onGround && player.horizontalSpeed() > 1.5) {
@@ -1337,7 +1414,7 @@ renderer.setAnimationLoop(() => {
       }
     }
 
-    if (player.health < player.maxHealth * 0.35 && player.health > 0) {
+    if (!mech.active && player.health < player.maxHealth * 0.35 && player.health > 0) {
       heartbeatTimer -= dt;
       if (heartbeatTimer <= 0) {
         heartbeatTimer = 0.95;

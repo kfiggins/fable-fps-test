@@ -51,6 +51,33 @@
     #scope::before { width: 56%; height: 1.5px; transform: translate(-50%, -50%); }
     #scope::after { width: 1.5px; height: 56%; transform: translate(-50%, -50%); }
 
+    /* mech cockpit: dark window frame around the view */
+    #cockpit { position: absolute; inset: 0; pointer-events: none; }
+    #cockpit::before {
+      content: ""; position: absolute; inset: 0;
+      background: radial-gradient(ellipse at center, transparent 55%, rgba(20, 40, 60, .22) 100%);
+    }
+    #cockpit .strut { position: absolute; width: 30%; height: 26%; background: #0b0f14f2; }
+    #cockpit .strut.tl { left: 0; top: 0; clip-path: polygon(0 0, 100% 0, 0 100%); }
+    #cockpit .strut.tr { right: 0; top: 0; clip-path: polygon(0 0, 100% 0, 100% 100%); }
+    #cockpit .strut.bl { left: 0; bottom: 0; clip-path: polygon(0 0, 0 100%, 100% 100%); }
+    #cockpit .strut.br { right: 0; bottom: 0; clip-path: polygon(100% 0, 100% 100%, 0 100%); }
+    #cockpit-top {
+      position: absolute; top: 0; left: 0; right: 0; height: 30px;
+      background: linear-gradient(#0b0f14f8, #0b0f14e0 70%, transparent);
+      text-align: center; font-size: 10px; letter-spacing: 6px; color: #7fd8ff;
+      line-height: 26px;
+    }
+    #cockpit-bottom {
+      position: absolute; bottom: 0; left: 0; right: 0; height: 64px;
+      background: linear-gradient(transparent, #0b0f14e8 55%, #0b0f14f8);
+      display: flex; align-items: flex-end; justify-content: center; padding-bottom: 10px;
+    }
+    #mech-hp-wrap { width: 340px; text-align: center; }
+    #mech-hp-label { font-size: 9px; letter-spacing: 3px; color: #7fd8ff; margin-bottom: 4px; }
+    #mech-hp-bg { height: 9px; background: rgba(255,255,255,.1); border: 1px solid #7fd8ff44; border-radius: 4px; overflow: hidden; }
+    #mech-hp { height: 100%; width: 100%; background: linear-gradient(90deg, #7fd8ff, #b8ecff); border-radius: 4px; transition: width .1s; }
+
     .panel {
       position: absolute; padding: 10px 16px;
       background: rgba(10, 14, 20, .55); border: 1px solid rgba(255,255,255,.12);
@@ -278,6 +305,17 @@
   <div id="hud">
     <div id="vignette"></div>
     <div id="scope"></div>
+    <div id="cockpit" class="hidden">
+      <div class="strut tl"></div><div class="strut tr"></div>
+      <div class="strut bl"></div><div class="strut br"></div>
+      <div id="cockpit-top"><span>MECH-01</span></div>
+      <div id="cockpit-bottom">
+        <div id="mech-hp-wrap">
+          <div id="mech-hp-label">MECH INTEGRITY</div>
+          <div id="mech-hp-bg"><div id="mech-hp"></div></div>
+        </div>
+      </div>
+    </div>
     <div id="crosshair"></div>
     <div id="hitmarker">&times;</div>
     <div id="wave-panel" class="panel">

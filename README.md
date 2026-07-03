@@ -42,8 +42,11 @@ After each wave, pick 1 of 3 randomized upgrades (common/uncommon/rare/legendary
 improve every wave you survive). **Boss waves guarantee a legendary option.** Scrap is
 spent on the upgrade screen: **reroll (75)**, **grenade (30)**, **helper drone (125, max 2)**,
 the **jetpack (300)** — hold Space in the air to fly, then buy fuel/thrust upgrades
-until you can land on the building roof — or **armor bars (25 each, max 4)** that soak
-25 damage apiece and stay broken until you rebuy them.
+until you can land on the building roof — **armor bars (25 each, max 4)** that soak
+25 damage apiece and stay broken until you rebuy them — or the **MECH (1000)**: pilot a
+towering war machine with 2200 non-regenerating HP, dual infinite cannons, boost jets,
+Rocket Barrage on Q and Titan Stomp on E. When it dies you eject and it's gone for good
+(until the next 1000 scrap).
 
 **Abilities** appear in the upgrade pool as uncommon/rare/legendary cards and bind to
 **Q or E** (two slots — replace or skip freely): Healing Field, Grapple Claw,
