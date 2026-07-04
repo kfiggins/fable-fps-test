@@ -338,6 +338,8 @@ export class BotManager {
     // per-map tuning (main sets these at run start)
     this.mapDiff = 1;
     this.eliteFromWave = 16;
+    this.hpFactor = 1; // easy mode scales ALL enemy hp (bosses included)
+    this.accuracyMult = 1; // easy mode makes everyone aim worse
     this.hazards = world.hazards || [];
     this.playerBurnCd = 0;
   }
@@ -413,6 +415,10 @@ export class BotManager {
     bot.isMinion = isMinion;
     if (bot.cfg.scalesHp) {
       bot.maxHealth = Math.round(bot.cfg.hp * this.hpMult());
+      bot.health = bot.maxHealth;
+    }
+    if (this.hpFactor !== 1) {
+      bot.maxHealth = Math.max(10, Math.round(bot.maxHealth * this.hpFactor));
       bot.health = bot.maxHealth;
     }
     // elites: golden glow, one random perk, triple scrap
@@ -545,7 +551,7 @@ export class BotManager {
       this.spawnBot(this.spawnQueue.shift(), null, player.position);
       this.spawnDelay = 0.35;
     }
-    const accuracy = 1 + waveNum * 0.04;
+    const accuracy = (1 + waveNum * 0.04) * this.accuracyMult;
     for (const bot of this.bots) {
       if (bot.alive) this.updateBot(bot, dt, player, accuracy);
     }

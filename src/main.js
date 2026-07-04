@@ -151,6 +151,21 @@ const MAP = MAPS[MAP_ID];
 const WAVES = MAP.waves;
 const FINAL_WAVE = WAVES.length;
 
+// --- difficulty: NORMAL is the real game; EASY is for the kids ---
+const DIFFS = {
+  normal: { label: 'NORMAL', enemyDmg: 1, enemyHp: 1, enemySpeed: 1, accuracy: 1, bestSuffix: '' },
+  easy: { label: 'EASY', enemyDmg: 0.45, enemyHp: 0.7, enemySpeed: 0.85, accuracy: 0.7, bestSuffix: '-easy' },
+};
+let diffId = (() => {
+  try {
+    const d = localStorage.getItem('minifps-diff');
+    return DIFFS[d] ? d : 'normal';
+  } catch {
+    return 'normal';
+  }
+})();
+const DIFF = () => DIFFS[diffId];
+
 // wave mutators: occasional non-boss waves play by different rules
 const MUTATORS = {
   fog: { label: 'FOG', sub: '☁ FOG — THEY CLOSE IN UNSEEN' },
@@ -444,7 +459,7 @@ function updateBuildStrip() {
   }
 }
 
-const BEST_KEY = MAP.bestKey;
+const bestKey = () => MAP.bestKey + DIFF().bestSuffix;
 // best-score records are checksummed — hand-edited localStorage gets discarded
 function bestSig(s, w) {
   let h = 2166136261 >>> 0;
@@ -457,7 +472,7 @@ function bestSig(s, w) {
 }
 function loadBest() {
   try {
-    const b = JSON.parse(localStorage.getItem(BEST_KEY));
+    const b = JSON.parse(localStorage.getItem(bestKey()));
     if (!b || typeof b.score !== 'number' || b.sig !== bestSig(b.score, b.wave)) {
       return { score: 0, wave: 0 };
     }
@@ -470,7 +485,7 @@ function saveBest() {
   const best = loadBest();
   if (score > best.score) {
     localStorage.setItem(
-      BEST_KEY,
+      bestKey(),
       JSON.stringify({ score, wave: waveNum, sig: bestSig(score, waveNum) })
     );
   }
@@ -579,6 +594,8 @@ function startGame() {
   upgradeScreen.classList.add('hidden');
   bots.mapDiff = MAP.diff;
   bots.eliteFromWave = MAP.eliteFrom;
+  bots.hpFactor = DIFF().enemyHp;
+  bots.accuracyMult = DIFF().accuracy;
   state = 'playing';
   startWave(1);
 }
@@ -980,6 +997,7 @@ function endGame(won) {
   );
   initMapCards();
   mapSelect.classList.remove('hidden');
+  el('diff-select').classList.remove('hidden');
 }
 
 // --- pointer lock ---
@@ -999,6 +1017,7 @@ document.addEventListener('pointerlockchange', () => {
     state = 'paused';
     firing = false;
     mapSelect.classList.add('hidden');
+    el('diff-select').classList.add('hidden');
     showOverlay(
       'PAUSED',
       `WAVE ${waveNum} · SCORE ${score.toLocaleString()} · SCRAP ${scrap}`,
@@ -1371,6 +1390,7 @@ bots.onBossEnraged = (bot) => {
 
 bots.onPlayerHit = (dmg, kind, sourceBot) => {
   if (invulnTimer > 0) return;
+  dmg = Math.max(1, Math.round(dmg * DIFF().enemyDmg));
   // piloting: the mech soaks everything, raw — no player mitigations
   if (mech.active) {
     vignetteAlpha = Math.max(vignetteAlpha, 0.4);
@@ -1498,7 +1518,7 @@ function updateHUD(dt) {
   hudMult.className = comboMult > 1 ? `hot hot-${Math.min(comboMult, 5)}` : '';
   hudComboBar.style.width = `${(comboTimer / 4) * 100}%`;
 
-  hudWaveNum.textContent = `WAVE ${waveNum}`;
+  hudWaveNum.textContent = `WAVE ${waveNum}${diffId === 'easy' ? ' · EASY' : ''}`;
   if (waveState === 'intermission') {
     hudWaveInfo.textContent = `INCOMING ${Math.ceil(interTimer)}`;
   } else if (waveState === 'upgrade') {
@@ -1672,7 +1692,7 @@ renderer.setAnimationLoop(() => {
     }
 
     // FRENZY scales everyone; Time Dilation slows only non-bosses
-    bots.speedScale = mutator === 'frenzy' ? 1.3 : 1;
+    bots.speedScale = (mutator === 'frenzy' ? 1.3 : 1) * DIFF().enemySpeed;
     bots.slowMult = stats.enemySlow;
 
     // magnet bosses drag you toward them — fight it or fly
@@ -1815,6 +1835,32 @@ function initMapCards() {
     }
   }
 }
+// difficulty toggle (applies at the next run — no reload needed)
+const diffSelect = el('diff-select');
+function initDiffButtons() {
+  for (const btn of diffSelect.querySelectorAll('.diff-btn')) {
+    btn.classList.toggle('selected', btn.dataset.diff === diffId);
+  }
+}
+function refreshMenuMsg() {
+  const best = loadBest();
+  ovMsg.innerHTML =
+    `${MAP.name} — ${FINAL_WAVE} waves · ${DIFF().label}. They shoot back.` +
+    (best.score > 0 ? `<br />BEST: ${best.score.toLocaleString()} (wave ${best.wave})` : '');
+}
+diffSelect.addEventListener('click', (e) => {
+  const btn = e.target.closest('.diff-btn');
+  if (!btn) return;
+  e.stopPropagation();
+  diffId = DIFFS[btn.dataset.diff] ? btn.dataset.diff : 'normal';
+  try {
+    localStorage.setItem('minifps-diff', diffId);
+  } catch {}
+  initDiffButtons();
+  refreshMenuMsg();
+});
+initDiffButtons();
+
 mapSelect.addEventListener('click', (e) => {
   const card = e.target.closest('.map-card');
   if (!card) return;
@@ -1830,9 +1876,4 @@ mapSelect.addEventListener('click', (e) => {
 });
 initMapCards();
 
-{
-  const best = loadBest();
-  ovMsg.innerHTML =
-    `${MAP.name} — ${FINAL_WAVE} waves. They shoot back.` +
-    (best.score > 0 ? `<br />BEST: ${best.score.toLocaleString()} (wave ${best.wave})` : '');
-}
+refreshMenuMsg();

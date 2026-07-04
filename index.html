@@ -318,6 +318,15 @@
     .map-card.selected { border-color: #ffd36b; box-shadow: 0 0 18px #ffd36b33; }
     .map-card.locked, .map-card.soon { opacity: .45; cursor: default; }
     .map-card.locked:hover, .map-card.soon:hover { transform: none; border-color: rgba(255,255,255,.18); }
+
+    #diff-select { display: flex; gap: 8px; align-items: center; margin-bottom: 4px; }
+    #diff-label { font-size: 10px; letter-spacing: 2px; color: #7d8798; margin-right: 4px; }
+    .diff-btn {
+      padding: 7px 16px; font-family: inherit; font-size: 11px; letter-spacing: 2px;
+      background: rgba(14, 19, 28, .9); color: #9fb0c3;
+      border: 1px solid rgba(255,255,255,.2); border-radius: 7px; cursor: pointer;
+    }
+    .diff-btn.selected { color: #7ce7a5; border-color: #7ce7a5; box-shadow: 0 0 12px #7ce7a533; }
     #overlay #ov-msg { font-size: 16px; color: #ffd36b; line-height: 1.7; }
     #overlay #ov-sub { font-size: 13px; color: #9fb0c3; line-height: 1.8; }
     #overlay .prompt { margin-top: 18px; font-size: 14px; color: #7ce7a5; animation: pulse 1.4s infinite; }
@@ -390,6 +399,11 @@
       <div class="map-card" data-map="arena"><b>THE ARENA</b><span class="map-sub">30 WAVES</span></div>
       <div class="map-card" data-map="foundry"><b>THE FOUNDRY</b><span class="map-sub" id="foundry-sub">🔒 BEAT THE ARENA</span></div>
       <div class="map-card soon"><b>???</b><span class="map-sub">COMING SOON</span></div>
+    </div>
+    <div id="diff-select">
+      <span id="diff-label">DIFFICULTY</span>
+      <button class="diff-btn" data-diff="normal">NORMAL</button>
+      <button class="diff-btn" data-diff="easy">EASY · KIDS</button>
     </div>
     <div id="ov-msg">30 waves. Six bosses. They shoot back.</div>
     <div id="run-stats"></div>
