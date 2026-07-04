@@ -27,6 +27,10 @@ const JET_UP_MAX = 3;
 const COST_ARMOR = 25;
 const ARMOR_PER_BAR = 25;
 const ARMOR_MAX = ARMOR_PER_BAR * 4;
+const COST_DRONE_RATE = 100;
+const DRONE_RATE_MAX = 3;
+const COST_DRONE_TWIN = 150;
+const COST_DRONE_REPAIR = 150;
 
 function mix(g, r, s, t, w = 0) {
   return [
@@ -106,6 +110,7 @@ const sounds = new Sounds();
 const bots = new BotManager(scene, world, effects, sounds);
 const grenades = new GrenadeManager(scene, effects, sounds);
 const drones = new DroneManager(scene, world.occluders, effects, sounds);
+drones.heal = (amt) => { player.health = Math.min(healCap(), player.health + amt); };
 const abilities = new AbilityManager({
   scene, camera, player, bots, world, effects, sounds,
   dealDamage: (...a) => dealDamage(...a),
@@ -259,6 +264,7 @@ let jetThrustUps = 0;
 let jetSoundAcc = 0;
 let armor = 0; // scrap-bought, absorbs damage first, never regenerates
 let mutator = null; // active wave mutator key or null
+let droneRateUps = 0;
 
 function offerLocked() {
   return performance.now() - offerOpenedAt < 700;
@@ -451,6 +457,7 @@ function startGame() {
   jetFuelUps = 0;
   jetThrustUps = 0;
   armor = 0;
+  droneRateUps = 0;
   player.maxHealth = 100;
   player.reset();
   syncStats();
@@ -612,6 +619,45 @@ function renderShop() {
       can: scrap >= COST_DRONE && drones.count() < DRONE_MAX,
       act: () => { scrap -= COST_DRONE; drones.add(); sounds.pickup(); addFeedLine('DRONE ONLINE'); renderShop(); },
     },
+    ...(drones.count() > 0
+      ? [
+          {
+            label: droneRateUps >= DRONE_RATE_MAX
+              ? 'DRONE FIRE RATE — MAX'
+              : `DRONE FIRE RATE +30% — ${COST_DRONE_RATE} (${droneRateUps}/${DRONE_RATE_MAX})`,
+            can: scrap >= COST_DRONE_RATE && droneRateUps < DRONE_RATE_MAX,
+            act: () => {
+              scrap -= COST_DRONE_RATE;
+              droneRateUps++;
+              drones.fireRateMult *= 1.3;
+              sounds.pickup();
+              renderShop();
+            },
+          },
+          {
+            label: drones.twin ? 'TWIN CANNONS — OWNED' : `DRONE TWIN CANNONS — ${COST_DRONE_TWIN}`,
+            can: scrap >= COST_DRONE_TWIN && !drones.twin,
+            act: () => {
+              scrap -= COST_DRONE_TWIN;
+              drones.twin = true;
+              sounds.pickup();
+              addFeedLine('DRONES: TWIN CANNONS');
+              renderShop();
+            },
+          },
+          {
+            label: drones.repair ? 'REPAIR MODULE — OWNED' : `DRONE REPAIR MODULE — ${COST_DRONE_REPAIR}`,
+            can: scrap >= COST_DRONE_REPAIR && !drones.repair,
+            act: () => {
+              scrap -= COST_DRONE_REPAIR;
+              drones.repair = true;
+              sounds.pickup();
+              addFeedLine('DRONES: REPAIR MODULE (2.5 HP/S EACH)');
+              renderShop();
+            },
+          },
+        ]
+      : []),
     {
       label: armor >= ARMOR_MAX
         ? 'ARMOR — MAX (4/4)'
@@ -1488,9 +1534,7 @@ renderer.setAnimationLoop(() => {
       explodeGrenade
     );
 
-    if (waveState === 'active') {
-      drones.update(dt, player, bots.bots, dealDamage);
-    }
+    drones.update(dt, player, bots.bots, dealDamage);
 
     fireCooldown -= dt;
     comboTimer = Math.max(0, comboTimer - dt);

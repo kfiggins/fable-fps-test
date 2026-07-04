@@ -20,6 +20,11 @@ export class DroneManager {
     this.raycaster = new THREE.Raycaster();
     this.drones = [];
     this.angle = 0;
+    // scrap-bought evolutions (reset each run via clear())
+    this.fireRateMult = 1;
+    this.twin = false;
+    this.repair = false;
+    this.heal = null; // set by main: (amount) => {}
   }
 
   count() {
@@ -67,6 +72,9 @@ export class DroneManager {
       });
     }
     this.drones = [];
+    this.fireRateMult = 1;
+    this.twin = false;
+    this.repair = false;
   }
 
   update(dt, player, botsList, dealDamage) {
@@ -80,6 +88,11 @@ export class DroneManager {
       );
       d.group.position.lerp(_desired, Math.min(1, dt * 6));
       for (const r of d.rotors) r.rotation.y += dt * 30;
+
+      // repair module: each drone slowly patches you up
+      if (this.repair && this.heal && player.health < player.maxHealth) {
+        this.heal(2.5 * dt);
+      }
 
       d.shootTimer -= dt;
       if (d.shootTimer > 0) continue;
@@ -105,7 +118,7 @@ export class DroneManager {
         }
       }
       if (best) {
-        d.shootTimer = FIRE_INTERVAL;
+        d.shootTimer = FIRE_INTERVAL / this.fireRateMult;
         _target.copy(best.group.position);
         _target.y += 0.9 * best.cfg.scale;
         d.group.lookAt(_target);
@@ -113,6 +126,12 @@ export class DroneManager {
         this.effects.spark(_target, 0x7fe7ff);
         this.sounds.droneShot();
         dealDamage(best, DAMAGE, 'body', { source: 'drone' });
+        if (this.twin) {
+          _desired.copy(d.group.position);
+          _desired.y -= 0.25;
+          this.effects.tracer(_desired, _target, 0x7fe7ff);
+          dealDamage(best, DAMAGE, 'body', { source: 'drone', depth: 1 });
+        }
       } else {
         d.shootTimer = 0.3;
       }
