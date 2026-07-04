@@ -6,7 +6,7 @@ import { deepFreeze } from './util.js';
 // Its health never regenerates — when it dies you're ejected and it's gone.
 export const MECH = {
   cost: 1000,
-  hp: 1500,
+  hp: 1000,
   eye: 4.2, radius: 1.3, step: 1.2, speed: 8.5, jump: 12,
   gun: { dmg: 70, splash: 25, splashR: 2, interval: 0.09 },
   rockets: { n: 6, dmg: 120, radius: 4.5, cd: 18 },
