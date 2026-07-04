@@ -802,7 +802,7 @@ export class BotManager {
     bot.body.position.y = 0.85 + Math.sin(bot.time * 7) * 0.03;
 
     // molten floor burns ground units (knockback someone into a channel!)
-    if (!cfg.fly && bot.group.position.y < 0.5 && this.hazards.length) {
+    if (!cfg.fly && bot.group.position.y < 0.3 && this.hazards.length) {
       bot.burnTick -= dt;
       if (bot.burnTick <= 0) {
         const bp = bot.group.position;

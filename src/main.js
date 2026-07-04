@@ -1620,7 +1620,7 @@ renderer.setAnimationLoop(() => {
     if (world.hazards.length) {
       lavaCd = Math.max(0, lavaCd - dt);
       const feet = player.position.y - player.eye;
-      if (feet < 0.4 && lavaCd <= 0) {
+      if (feet < 0.35 && lavaCd <= 0) {
         for (const h of world.hazards) {
           if (
             player.position.x > h.minX && player.position.x < h.maxX &&

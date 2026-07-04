@@ -303,53 +303,64 @@ export function createWorld(scene, mapId = 'arena') {
   } else {
     // ================= MAP 2: THE FOUNDRY =================
     const steelMat = new THREE.MeshStandardMaterial({ color: 0x4a4e57, roughness: 0.7, metalness: 0.35 });
+    const railMat = new THREE.MeshStandardMaterial({ color: 0x6a707c, roughness: 0.6, metalness: 0.4 });
     const darkMat = new THREE.MeshStandardMaterial({ color: 0x35383f, roughness: 0.8, metalness: 0.3 });
     const stepMat = new THREE.MeshStandardMaterial({ color: 0x565b66, roughness: 0.8 });
     const crateMat = new THREE.MeshStandardMaterial({ color: 0x5c5346, roughness: 0.85 });
     const moltenMat = new THREE.MeshBasicMaterial({ color: 0xff6a1a });
 
-    // --- molten channels (deadly floor) ---
-    // channel A: vertical strip x -6..-2 ; channel B: horizontal z 8..12
-    function addChannel(minX, maxX, minZ, maxZ) {
+    function addLava(minX, maxX, minZ, maxZ, lightCount) {
       hazards.push({ minX, maxX, minZ, maxZ });
-      const mesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(maxX - minX, maxZ - minZ),
-        moltenMat
-      );
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(maxX - minX, maxZ - minZ), moltenMat);
       mesh.rotation.x = -Math.PI / 2;
       mesh.position.set((minX + maxX) / 2, 0.03, (minZ + maxZ) / 2);
       scene.add(mesh);
       solids.push(mesh);
-      // flickering lava glow
-      const count = Math.max(2, Math.round((maxX - minX + maxZ - minZ) / 20));
-      for (let i = 0; i < count; i++) {
-        const lx = minX + ((i + 0.5) / count) * (maxX - minX);
-        const lz = minZ + ((i + 0.5) / count) * (maxZ - minZ);
-        const lamp = new THREE.PointLight(0xff5a1a, 5, 14);
-        lamp.position.set(lx, 1.2, lz);
+      for (let i = 0; i < lightCount; i++) {
+        const lamp = new THREE.PointLight(0xff5a1a, 5, 16);
+        lamp.position.set(
+          minX + ((i + 0.5) / lightCount) * (maxX - minX),
+          1.2,
+          minZ + ((i + 0.5) / lightCount) * (maxZ - minZ)
+        );
         scene.add(lamp);
       }
     }
-    addChannel(-6, -2, -45, 45);
-    addChannel(-45, 45, 8, 12);
 
-    // bridges over the channels (walkable, low)
-    const bridge = (x, z, w, d) => addBox(x, 0.2, z, w, 0.4, d, steelMat);
-    bridge(-4, -20, 6, 4);
-    bridge(-4, 2, 6, 4);
-    bridge(-4, 28, 6, 4);
-    bridge(-25, 10, 4, 6);
-    bridge(10, 10, 4, 6);
-    bridge(32, 10, 4, 6);
+    // --- THE CRUCIBLE: central lava pool with a raised island ---
+    addLava(-9, 9, -9, 9, 3);
+    // extra glow at the pool corners
+    for (const [lx, lz] of [[-7, 7], [7, -7]]) {
+      const lamp = new THREE.PointLight(0xff5a1a, 5, 16);
+      lamp.position.set(lx, 1.2, lz);
+      scene.add(lamp);
+    }
+    // island platform (sniper nest surrounded by lava)
+    addBox(0, 1.2, 0, 6, 2.4, 6, steelMat, { cover: true });
+    // low parapets on the island's north/south edges
+    addBox(0, 2.7, -2.85, 6, 0.6, 0.3, railMat);
+    addBox(0, 2.7, 2.85, 6, 0.6, 0.3, railMat);
+    // stepped bridges east + west across the pool
+    for (const s of [1, -1]) {
+      addBox(s * 7.75, 0.2, 0, 3.5, 0.4, 2.8, steelMat); // bridge deck
+      addBox(s * 5.5, 0.45, 0, 1, 0.9, 2.8, stepMat);
+      addBox(s * 4.5, 0.7, 0, 1, 1.4, 2.8, stepMat);
+      addBox(s * 3.5, 0.95, 0, 1, 1.9, 2.8, stepMat);
+    }
 
-    // --- furnace halls: walk-through tunnels with walkable roofs ---
-    const furnaces = [];
+    // --- feeder channels north + south, with bridges ---
+    addLava(-2, 2, -45, -9, 3);
+    addLava(-2, 2, 9, 45, 3);
+    for (const z of [-30, -16, 16, 30]) {
+      addBox(0, 0.2, z, 6, 0.4, 4.5, steelMat);
+    }
+
+    // --- furnace halls (walk-through, walkable roofs) ---
+    const structures = [];
     function addFurnace(cx, cz, stairsDirX) {
       const W = 9, D = 6, H = 4.5, T = 0.4;
-      // side walls (long sides face north/south), doorways on east/west ends
       addBox(cx, H / 2, cz - D / 2 + T / 2, W, H, T, darkMat, { cover: true });
       addBox(cx, H / 2, cz + D / 2 - T / 2, W, H, T, darkMat, { cover: true });
-      // end walls with doorway gaps (2.4 wide, 2.6 high)
       for (const sx of [-1, 1]) {
         const ex = cx + sx * (W / 2 - T / 2);
         const postD = (D - 2.4) / 2;
@@ -357,117 +368,155 @@ export function createWorld(scene, mapId = 'arena') {
         addBox(ex, H / 2, cz + D / 2 - postD / 2, T, H, postD, darkMat);
         addBox(ex, (H + 2.6) / 2, cz, T, H - 2.6, 2.4, darkMat);
       }
-      // roof slab
       addBox(cx, H - 0.2, cz, W, 0.4, D, steelMat);
-      // roof parapets on the two long sides
-      addBox(cx, H + 0.35, cz - D / 2 + 0.15, W, 0.7, 0.3, steelMat);
-      addBox(cx, H + 0.35, cz + D / 2 - 0.15, W, 0.7, 0.3, steelMat);
-      // external stairs up one end (9 steps x 0.5)
+      addBox(cx, H + 0.35, cz - D / 2 + 0.15, W, 0.7, 0.3, railMat);
+      addBox(cx, H + 0.35, cz + D / 2 - 0.15, W, 0.7, 0.3, railMat);
       for (let i = 0; i < 9; i++) {
         const top = 4.5 - i * 0.5;
-        const dist = W / 2 + 0.45 + i * 0.85;
-        addBox(cx + stairsDirX * dist, top / 2, cz, 0.85, top, 2.2, stepMat);
+        addBox(cx + stairsDirX * (W / 2 + 0.45 + i * 0.85), top / 2, cz, 0.85, top, 2.2, stepMat);
       }
-      // decorative chimney pipes (visual+collision, on roof)
-      addBox(cx - 2, H + 1.1, cz, 1, 2.2, 1, darkMat);
-      furnaces.push({
-        x: cx, z: cz, stairsDirX,
+      addBox(cx - stairsDirX * 2.5, H + 1.3, cz, 1.2, 2.6, 1.2, darkMat); // chimney
+      structures.push({
+        kind: 'furnace', x: cx, z: cz,
         route: [
-          new THREE.Vector3(cx + stairsDirX * (W / 2 + 8.6), 0, cz),
-          new THREE.Vector3(cx + stairsDirX * (W / 2 + 4.3), 2.25, cz),
+          new THREE.Vector3(cx + stairsDirX * (4.5 + 8.6), 0, cz),
+          new THREE.Vector3(cx + stairsDirX * (4.5 + 4.3), 2.25, cz),
           new THREE.Vector3(cx + stairsDirX * 2.5, 4.5, cz),
           new THREE.Vector3(cx, 4.5, cz),
         ],
       });
     }
-    addFurnace(-20, -12, 1);  // stairs facing east
-    addFurnace(18, -18, -1);  // stairs facing west
+    addFurnace(-26, -24, -1); // NW hall, stairs toward the west wall
+    addFurnace(26, 24, 1);    // SE hall, stairs toward the east wall
 
-    // catwalk connecting the two furnace roofs (top at 4.5)
+    // --- NE overlook platform (catwalk junction) ---
     {
-      const a = furnaces[0], b = furnaces[1];
-      const dx = b.x - a.x, dz = b.z - a.z;
-      const len = Math.hypot(dx, dz);
-      const segs = Math.ceil(len / 6);
-      for (let i = 1; i < segs; i++) {
-        const t = i / segs;
-        const x = a.x + dx * t;
-        const z = a.z + dz * t;
-        addBox(x, 4.32, z, 6.2, 0.35, 1.8, steelMat);
-        // railings
-        addBox(x, 4.95, z - 1.05, 6.2, 0.9, 0.15, steelMat);
-        addBox(x, 4.95, z + 1.05, 6.2, 0.9, 0.15, steelMat);
+      const px = 26, pz = -24, top = 4.5;
+      addBox(px, top - 0.2, pz, 6, 0.4, 6, steelMat);
+      for (const [ox, oz] of [[-2.5, -2.5], [2.5, -2.5], [-2.5, 2.5], [2.5, 2.5]]) {
+        addBox(px + ox, (top - 0.4) / 2, pz + oz, 0.6, top - 0.4, 0.6, darkMat);
       }
+      addBox(px - 2.85, top + 0.35, pz, 0.3, 0.7, 6, railMat);
+      addBox(px + 2.85, top + 0.35, pz, 0.3, 0.7, 6, railMat);
+      for (let i = 0; i < 9; i++) {
+        const stop = 4.5 - i * 0.5;
+        addBox(px, stop / 2, pz - (3 + 0.45 + i * 0.85), 2.2, stop, 0.85, stepMat);
+      }
+      structures.push({
+        kind: 'plat', x: px, z: pz,
+        route: [
+          new THREE.Vector3(px, 0, pz - 3 - 8.6),
+          new THREE.Vector3(px, 2.25, pz - 3 - 4.3),
+          new THREE.Vector3(px, 4.5, pz - 1),
+          new THREE.Vector3(px, 4.5, pz),
+        ],
+      });
     }
 
-    // machinery blocks + pipes
+    // --- straight catwalk circuit at 4.5: NW roof -> NE platform -> SE roof ---
+    function addCatwalk(x1, z1, x2, z2) {
+      const horizontal = z1 === z2;
+      const len = horizontal ? Math.abs(x2 - x1) : Math.abs(z2 - z1);
+      const cx = (x1 + x2) / 2;
+      const cz = (z1 + z2) / 2;
+      if (horizontal) {
+        addBox(cx, 4.32, cz, len, 0.35, 2.2, steelMat);
+        addBox(cx, 4.95, cz - 1.25, len, 0.9, 0.15, railMat);
+        addBox(cx, 4.95, cz + 1.25, len, 0.9, 0.15, railMat);
+      } else {
+        addBox(cx, 4.32, cz, 2.2, 0.35, len, steelMat);
+        addBox(cx - 1.25, 4.95, cz, 0.15, 0.9, len, railMat);
+        addBox(cx + 1.25, 4.95, cz, 0.15, 0.9, len, railMat);
+      }
+      // support columns (skip any that would stand in lava)
+      const n = Math.max(1, Math.round(len / 8));
+      for (let i = 1; i <= n; i++) {
+        const t = i / (n + 1);
+        const sx = x1 + (x2 - x1) * t;
+        const sz = z1 + (z2 - z1) * t;
+        if (hazards.some((h) => sx > h.minX - 0.5 && sx < h.maxX + 0.5 && sz > h.minZ - 0.5 && sz < h.maxZ + 0.5)) continue;
+        addBox(sx, 2.07, sz, 0.55, 4.15, 0.55, darkMat);
+      }
+    }
+    addCatwalk(-21.5, -24, 23, -24); // NW roof east edge -> NE platform west edge
+    addCatwalk(26, -21, 26, 21);     // NE platform south edge -> SE roof north edge
+
+    // --- SW storage yard: crate maze ---
+    for (const [x, z, h] of [
+      [-24, 18, 2], [-28, 24, 1.8], [-20, 26, 1.6], [-30, 14, 1.6],
+      [-16, 22, 1.8], [-24, 30, 2],
+    ]) {
+      addBox(x, h / 2, z, h + 0.6, h, h + 0.6, crateMat, { cover: true });
+    }
+    // machinery scattered with purpose near structures
     for (const [x, z, w, h, d] of [
-      [2, -30, 4, 3, 3], [28, 24, 3.5, 2.8, 3.5], [-30, 22, 4, 3, 3.5],
-      [8, 32, 3, 3, 3], [-28, -32, 4, 2.6, 3], [34, -8, 3, 3, 4],
-      [-36, -6, 3, 2.6, 3], [20, 0, 3.4, 2.8, 3],
+      [14, -8, 3.4, 2.8, 3], [-14, 8, 3.4, 2.8, 3], [12, 34, 4, 3, 3],
+      [-12, -34, 4, 3, 3], [36, 2, 3, 2.6, 4], [-36, -2, 3, 2.6, 4],
     ]) {
       addBox(x, h / 2, z, w, h, d, darkMat, { cover: true });
-      const pipe = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.35, 0.35, 2.2, 10),
-        steelMat
-      );
+      const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 2.2, 10), steelMat);
       pipe.position.set(x + w / 4, h + 1.1, z);
       pipe.castShadow = true;
       scene.add(pipe);
     }
-
-    // steel crates
-    for (const [x, z, h] of [
-      [-12, -26, 1.8], [12, -8, 1.6], [-14, 20, 2], [24, -28, 1.8],
-      [-34, 34, 1.6], [36, 34, 1.8], [14, 20, 1.6], [-22, 2, 1.8],
-      [30, -34, 1.6], [4, 18, 1.8],
-    ]) {
-      addBox(x, h / 2, z, h + 0.5, h, h + 0.5, crateMat, { cover: true });
+    // tall cooling chimneys for skyline
+    for (const [x, z] of [[-34, -34], [34, 34], [-8, -40], [8, 40]]) {
+      addBox(x, 4.5, z, 2, 9, 2, darkMat, { cover: true });
     }
 
-    const onFurnaceArea = (f, x, z, feet) => {
-      if (Math.abs(x - f.x) < 5.4 && Math.abs(z - f.z) < 3.9 && feet > 3.6) return true;
-      const along = (x - f.x) * f.stairsDirX;
-      return along > 4.5 && along < 13.5 && Math.abs(z - f.z) < 1.6 && feet > 0.3;
+    // island routes: cross a bridge, up the steps
+    const islandRoutes = [1, -1].map((s) => [
+      new THREE.Vector3(s * 11.5, 0, 0),
+      new THREE.Vector3(s * 7.5, 0.4, 0),
+      new THREE.Vector3(s * 4.5, 1.4, 0),
+      new THREE.Vector3(0, 2.4, 0),
+    ]);
+
+    const onStructure = (st, x, z, feet) => {
+      if (st.kind === 'furnace') {
+        return Math.abs(x - st.x) < 5.4 && Math.abs(z - st.z) < 3.9 && feet > 3.6;
+      }
+      return Math.abs(x - st.x) < 3.6 && Math.abs(z - st.z) < 3.6 && feet > 3.6;
     };
-    const onCatwalk = (x, z, feet) => {
-      if (feet < 3.6) return false;
-      const a = furnaces[0], b = furnaces[1];
-      // rough segment proximity
-      const dx = b.x - a.x, dz = b.z - a.z;
-      const len2 = dx * dx + dz * dz;
-      const t = Math.max(0, Math.min(1, ((x - a.x) * dx + (z - a.z) * dz) / len2));
-      const cx = a.x + dx * t, cz = a.z + dz * t;
-      return Math.hypot(x - cx, z - cz) < 2.2;
-    };
+    const onCatwalkArea = (x, z, feet) =>
+      feet > 3.6 &&
+      ((Math.abs(z + 24) < 1.8 && x > -22 && x < 24) ||
+        (Math.abs(x - 26) < 1.8 && z > -22 && z < 22));
+    const onIsland = (x, z, feet) => Math.abs(x) < 4 && Math.abs(z) < 4 && feet > 1.6;
 
     routeFor = function (botPos, playerPos) {
       const pFeet = playerPos.y - EYE;
+      if (pFeet < 1.4) return null;
+      if (onIsland(playerPos.x, playerPos.z, pFeet)) {
+        if (onIsland(botPos.x, botPos.z, botPos.y)) return null;
+        const r = botPos.x > 0 ? 0 : 1;
+        return { key: `isl${r}`, points: islandRoutes[r] };
+      }
       if (pFeet < 3) return null;
-      for (let i = 0; i < furnaces.length; i++) {
-        const f = furnaces[i];
-        if (onFurnaceArea(f, playerPos.x, playerPos.z, pFeet)) {
-          if (Math.abs(botPos.x - f.x) < 5.4 && Math.abs(botPos.z - f.z) < 3.9 && botPos.y > 3.6) return null;
-          return { key: `f${i}`, points: f.route };
+      for (let i = 0; i < structures.length; i++) {
+        if (onStructure(structures[i], playerPos.x, playerPos.z, pFeet)) {
+          if (onStructure(structures[i], botPos.x, botPos.z, botPos.y)) return null;
+          return { key: `s${i}`, points: structures[i].route };
         }
       }
-      if (onCatwalk(playerPos.x, playerPos.z, pFeet)) {
-        // climb the nearest furnace, walk the catwalk from there
+      if (onCatwalkArea(playerPos.x, playerPos.z, pFeet)) {
+        if (botPos.y > 3.6) return null;
         let best = 0;
-        if (
-          botPos.distanceTo(furnaces[1].route[0]) < botPos.distanceTo(furnaces[0].route[0])
-        ) best = 1;
-        if (botPos.y > 3.6) return null; // already up top somewhere
-        return { key: `fc${best}`, points: furnaces[best].route };
+        let bd = Infinity;
+        for (let i = 0; i < structures.length; i++) {
+          const d = Math.hypot(botPos.x - structures[i].route[0].x, botPos.z - structures[i].route[0].z);
+          if (d < bd) { bd = d; best = i; }
+        }
+        return { key: `cw${best}`, points: structures[best].route };
       }
       return null;
     };
 
     spawnPoints = [
-      [-40, -40], [40, -40], [-40, 40], [40, 40], [0, -41], [0, 41],
-      [-41, -20], [41, 20], [-40, 26], [40, -26], [22, 41], [-22, -41],
+      [-40, -40], [40, -40], [-40, 40], [40, 40], [22, -41], [-22, 41],
+      [-41, -18], [41, 18], [-40, 30], [40, -30], [14, 41], [-14, -41],
     ].map(([x, z]) => new THREE.Vector3(x, 0, z));
-    playerSpawn = { x: 24, z: -24, yaw: Math.PI / 4 + Math.PI / 2 };
+    playerSpawn = { x: -24, z: 26, yaw: 2.4 };
   }
 
   return {
