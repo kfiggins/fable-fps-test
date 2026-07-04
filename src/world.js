@@ -350,5 +350,5 @@ export function createWorld(scene) {
     new THREE.Vector3(-20, 0, -40),
   ];
 
-  return { solids, occluders, obstacleBoxes, spawnPoints, coverSpots, routeFor };
+  return { solids, occluders, obstacleBoxes, spawnPoints, coverSpots, routeFor, hemi, sun };
 }

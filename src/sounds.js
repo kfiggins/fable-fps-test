@@ -244,6 +244,10 @@ export class Sounds {
     this.noise(0.08, 0.25);
   }
 
+  waspDive() {
+    this.sweep('sawtooth', 350, 950, 0.55, 0.25);
+  }
+
   victory() {
     this.sweep('sine', 520, 520, 0.14, 0.4);
     this.sweep('sine', 660, 660, 0.14, 0.4, 0.15);

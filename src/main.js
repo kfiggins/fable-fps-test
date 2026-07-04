@@ -28,12 +28,13 @@ const COST_ARMOR = 25;
 const ARMOR_PER_BAR = 25;
 const ARMOR_MAX = ARMOR_PER_BAR * 4;
 
-function mix(g, r, s, t) {
+function mix(g, r, s, t, w = 0) {
   return [
     ...Array(g).fill('grunt'),
     ...Array(r).fill('rusher'),
     ...Array(s).fill('sniper'),
     ...Array(t).fill('tank'),
+    ...Array(w).fill('wasp'),
   ];
 }
 const WAVES = [
@@ -42,36 +43,43 @@ const WAVES = [
   mix(4, 3, 2, 0),
   mix(4, 3, 2, 2),
   ['warden', 'rusher', 'rusher'],
-  mix(6, 4, 2, 2),
-  mix(5, 4, 3, 3),
-  mix(4, 6, 4, 3),
-  mix(6, 5, 4, 4),
+  mix(6, 4, 2, 2, 2),
+  mix(5, 4, 3, 3, 2),
+  mix(4, 6, 4, 3, 3),
+  mix(6, 5, 4, 4, 3),
   ['titan', 'grunt', 'grunt', 'sniper', 'sniper'],
-  mix(6, 5, 3, 3),
-  mix(6, 6, 4, 3),
-  mix(7, 6, 4, 4),
-  mix(6, 8, 5, 4),
-  ['butcher', 'rusher', 'rusher', 'tank'],
-  mix(8, 7, 5, 4),
-  mix(8, 8, 5, 5),
-  mix(8, 9, 6, 5),
-  mix(9, 10, 6, 6),
+  mix(6, 5, 3, 3, 2),
+  mix(6, 6, 4, 3, 3),
+  mix(7, 6, 4, 4, 3),
+  mix(6, 8, 5, 4, 4),
+  ['butcher', 'rusher', 'rusher', 'tank', 'wasp', 'wasp'],
+  mix(8, 7, 5, 4, 4),
+  mix(8, 8, 5, 5, 4),
+  mix(8, 9, 6, 5, 5),
+  mix(9, 10, 6, 6, 5),
   ['overlord', 'sniper', 'sniper', 'tank', 'tank'],
-  mix(8, 8, 5, 5),
-  mix(9, 9, 6, 5),
-  mix(9, 10, 6, 6),
-  mix(10, 10, 7, 6),
-  ['phantom', 'sniper', 'sniper', 'rusher', 'rusher'],
-  mix(10, 11, 7, 6),
-  mix(10, 12, 7, 7),
-  mix(11, 12, 8, 7),
-  mix(12, 13, 8, 8),
-  ['apex', 'tank', 'tank', 'sniper', 'sniper', 'rusher', 'rusher'],
+  mix(8, 8, 5, 5, 4),
+  mix(9, 9, 6, 5, 5),
+  mix(9, 10, 6, 6, 5),
+  mix(10, 10, 7, 6, 6),
+  ['phantom', 'sniper', 'sniper', 'rusher', 'rusher', 'wasp', 'wasp'],
+  mix(10, 11, 7, 6, 5),
+  mix(10, 12, 7, 7, 6),
+  mix(11, 12, 8, 7, 6),
+  mix(12, 13, 8, 8, 7),
+  ['apex', 'tank', 'tank', 'sniper', 'sniper', 'rusher', 'rusher', 'wasp', 'wasp'],
 ];
 const FINAL_WAVE = WAVES.length;
 
+// wave mutators: occasional non-boss waves play by different rules
+const MUTATORS = {
+  fog: { label: 'FOG', sub: '☁ FOG — THEY CLOSE IN UNSEEN' },
+  frenzy: { label: 'FRENZY', sub: '⚡ FRENZY — FASTER ENEMIES, DOUBLE SCRAP' },
+  blackout: { label: 'BLACKOUT', sub: '🌙 BLACKOUT — WATCH FOR THE VISORS' },
+};
+
 // scrap dropped per kill (when the roll hits)
-const SCRAP_VALUES = { grunt: 10, rusher: 12, sniper: 15, tank: 25 };
+const SCRAP_VALUES = { grunt: 10, rusher: 12, sniper: 15, tank: 25, wasp: 12 };
 const SCRAP_BOSS = 150;
 
 // --- renderer / scene ---
@@ -250,6 +258,7 @@ let jetFuelUps = 0;
 let jetThrustUps = 0;
 let jetSoundAcc = 0;
 let armor = 0; // scrap-bought, absorbs damage first, never regenerates
+let mutator = null; // active wave mutator key or null
 
 function offerLocked() {
   return performance.now() - offerOpenedAt < 700;
@@ -312,7 +321,6 @@ function syncStats() {
   player.canDoubleJump = stats.doubleJump && !mech.active;
   player.regenDelay = stats.regenDelay;
   player.regenRate = stats.regenRate;
-  bots.speedScale = stats.enemySlow;
   for (const id of WEAPON_ORDER) {
     weaponAmmo[id] = Math.min(weaponAmmo[id], magSize(WEAPONS[id]));
   }
@@ -467,12 +475,48 @@ function startGame() {
   startWave(1);
 }
 
+// lighting/fog defaults for restoring after mutator waves
+function applyMutator(m) {
+  mutator = m;
+  if (m === 'fog') {
+    scene.fog.near = 16;
+    scene.fog.far = 50;
+    scene.fog.color.setHex(0x76858f);
+    scene.background.setHex(0x76858f);
+  } else if (m === 'blackout') {
+    world.hemi.intensity = 0.12;
+    world.sun.intensity = 0.18;
+    scene.fog.near = 30;
+    scene.fog.far = 110;
+    scene.fog.color.setHex(0x0a0e16);
+    scene.background.setHex(0x0a0e16);
+  }
+}
+
+function clearMutator() {
+  mutator = null;
+  scene.fog.near = 70;
+  scene.fog.far = 170;
+  scene.fog.color.setHex(0x8db8d8);
+  scene.background.setHex(0x8db8d8);
+  world.hemi.intensity = 0.9;
+  world.sun.intensity = 1.6;
+}
+
 function startWave(n) {
   waveNum = n;
   waveState = 'intermission';
   interTimer = 3;
+  clearMutator();
   const isBoss = WAVES[n - 1].some((t) => BOT_TYPES[t].boss);
-  showBanner(`WAVE ${n}`, isBoss ? '⚠ BOSS INCOMING ⚠' : '');
+  if (!isBoss && n >= 4 && Math.random() < 0.25) {
+    const keys = Object.keys(MUTATORS);
+    applyMutator(keys[Math.floor(Math.random() * keys.length)]);
+  }
+  showBanner(
+    `WAVE ${n}`,
+    isBoss ? '⚠ BOSS INCOMING ⚠' : mutator ? MUTATORS[mutator].sub : ''
+  );
   if (isBoss) sounds.bossRoar();
   else sounds.waveStart();
 }
@@ -673,6 +717,7 @@ function pickUpgrade(upg) {
 }
 
 function onWaveCleared() {
+  clearMutator();
   const bonus = waveNum * 250;
   score += bonus;
   sounds.waveClear();
@@ -702,6 +747,7 @@ function endGame(won) {
   state = 'over';
   firing = false;
   aiming = false;
+  clearMutator();
   adsT = 0;
   fovCurrent = BASE_FOV;
   scopeOverlay.style.opacity = '0';
@@ -813,6 +859,10 @@ function addKill(bot, part) {
   kills++;
   let pts = bot.cfg.points;
   const tags = [];
+  if (bot.elite) {
+    pts *= 2;
+    tags.push('ELITE');
+  }
   if (part === 'head') {
     pts *= 1.5;
     tags.push('HEADSHOT');
@@ -909,7 +959,13 @@ function dealDamage(bot, dmg, part, opts = {}) {
       if (Math.random() < GRENADE_DROP_CHANCE * stats.grenadeDropMult) {
         grenades.spawnPickup(pos, 'grenade');
       }
-      if (Math.random() < Math.min(0.95, SCRAP_DROP_CHANCE * stats.scrapDropMult)) {
+      if (bot.elite) {
+        // elites always pay out, triple
+        grenades.spawnPickup(pos, 'scrap', (SCRAP_VALUES[bot.type] || 10) * 3);
+      } else if (
+        Math.random() <
+        Math.min(0.95, SCRAP_DROP_CHANCE * stats.scrapDropMult * (mutator === 'frenzy' ? 2 : 1))
+      ) {
         grenades.spawnPickup(pos, 'scrap', SCRAP_VALUES[bot.type] || 10);
       }
     }
@@ -1235,7 +1291,7 @@ function updateHUD(dt) {
   } else if (waveState === 'upgrade') {
     hudWaveInfo.textContent = 'CHOOSE';
   } else {
-    hudWaveInfo.textContent = `ENEMIES ${bots.aliveCount()}`;
+    hudWaveInfo.textContent = `ENEMIES ${bots.aliveCount()}${mutator ? ' · ' + MUTATORS[mutator].label : ''}`;
   }
 
   if (bots.boss && bots.boss.alive) {
@@ -1338,6 +1394,8 @@ if (IS_DEV_HOST) window.__game = {
     armor(n) { armor = n; },
     getArmor: () => armor,
     mech() { if (!mech.active) mech.enter(); },
+    mutate(m) { clearMutator(); if (m) applyMutator(m); },
+    getMutator: () => mutator,
     mechState: () => (mech.active ? { hp: mech.hp, maxHp: mech.maxHp, cds: { ...mech.cds } } : null),
     mechDamage(n) { mech.damage(n); },
     addDrone() { return drones.add(); },
@@ -1394,6 +1452,9 @@ renderer.setAnimationLoop(() => {
         );
       }
     }
+
+    // Time Dilation and FRENZY both scale enemy speed
+    bots.speedScale = stats.enemySlow * (mutator === 'frenzy' ? 1.3 : 1);
 
     if (waveState === 'intermission') {
       interTimer -= dt;

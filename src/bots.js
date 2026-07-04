@@ -29,6 +29,11 @@ export const BOT_TYPES = {
     ai: 'sniper', longRifle: true,
     aimed: { dmg: 28, telegraph: 1.3, lockTime: 0.3, interval: [3.2, 4.4] },
   },
+  wasp: {
+    hp: 30, speed: 9, scale: 0.8, points: 150, color: 0xd8b400, visor: 0x1c1c1c,
+    ai: 'wasp', fly: true,
+    dive: { dmg: 35, radius: 3, speed: 17 },
+  },
   warden: {
     hp: 2200, speed: 2.4, scale: 2.2, points: 2000, color: 0x8a1f2d, visor: 0xffd24d,
     ai: 'skirmish', range: [7, 16], wide: true, boss: true, name: 'THE WARDEN',
@@ -133,7 +138,18 @@ class Bot {
     visor.position.set(0, 1.64, 0.24);
     this.group.add(body, head, visor);
 
-    if (cfg.spike) {
+    if (cfg.fly) {
+      this.wings = [];
+      for (const s of [-1, 1]) {
+        const wing = new THREE.Mesh(
+          new THREE.BoxGeometry(0.9, 0.04, 0.3),
+          new THREE.MeshStandardMaterial({ color: 0xe8e2c8, transparent: true, opacity: 0.55 })
+        );
+        wing.position.set(s * 0.6, 1.35, 0);
+        this.group.add(wing);
+        this.wings.push(wing);
+      }
+    } else if (cfg.spike) {
       const spike = new THREE.Mesh(
         new THREE.ConeGeometry(0.14, 0.4, 8),
         new THREE.MeshStandardMaterial({ color: 0x8a3300, roughness: 0.6 })
@@ -174,6 +190,12 @@ class Bot {
     this.strafeDir = Math.random() < 0.5 ? -1 : 1;
     this.strafeTimer = 1 + Math.random() * 2;
     this.state = 'engage';
+    this.baseScale = cfg.scale;
+    this.speedMod = 1;
+    this.elite = null;
+    this.orbitAngle = Math.random() * Math.PI * 2;
+    this.diveTimer = 2.5 + Math.random() * 4;
+    this.diveVel = null;
     this.coverTarget = null;
     this.coverWait = 0;
     this.coverCooldown = 0;
@@ -297,6 +319,20 @@ export class BotManager {
       bot.maxHealth = Math.round(bot.cfg.hp * this.hpMult());
       bot.health = bot.maxHealth;
     }
+    // elites: wave 16+, golden glow, one random perk, triple scrap
+    if (this.waveNum >= 16 && !isMinion && !bot.cfg.boss && Math.random() < 0.08) {
+      const mods = ['juggernaut', 'swift', 'volatile'];
+      bot.elite = mods[Math.floor(Math.random() * mods.length)];
+      if (bot.elite === 'juggernaut') {
+        bot.maxHealth = Math.round(bot.maxHealth * 2.5);
+        bot.health = bot.maxHealth;
+      }
+      if (bot.elite === 'swift') bot.speedMod = 1.5;
+      bot.baseScale = bot.cfg.scale * 1.12;
+      bot.radius *= 1.12;
+      bot.group.scale.setScalar(bot.baseScale);
+      this.setFlash(bot, 0);
+    }
     if (atPos) {
       bot.group.position.set(
         atPos.x + (Math.random() - 0.5) * 3,
@@ -337,6 +373,7 @@ export class BotManager {
     for (const m of bot.flashMats) {
       if (amount === 0 && bot.stunTimer > 0.2) m.emissive.setRGB(0.12, 0.38, 0.65); // frozen
       else if (amount === 0 && bot.enraged) m.emissive.setRGB(0.45, 0.04, 0.04);
+      else if (amount === 0 && bot.elite) m.emissive.setRGB(0.42, 0.3, 0.04); // gold
       else m.emissive.setRGB(amount, amount, amount);
     }
   }
@@ -377,11 +414,35 @@ export class BotManager {
     this.effects.explosion(center, 0xff5533, bot.cfg.boss ? 3 : bot.cfg.scale);
     this.effects.debris(center, bot.cfg.color, bot.cfg.boss ? 14 : 6, bot.cfg.scale);
     if (bot === this.boss) this.boss = null;
+    // wasps go out with a bang — hurting the player if close and chaining
+    // into their own allies (no player kill credit for chained deaths)
+    if (bot.cfg.dive) {
+      const p = bot.group.position;
+      this.sounds.cannon();
+      if (this.playerRef && this.onPlayerHit) {
+        _v.copy(this.playerRef.position);
+        _v.y -= this.playerBodyOffset;
+        const pd = _v.distanceTo(p);
+        if (pd < 1.7) this.onPlayerHit(bot.cfg.dive.dmg, 'blast', null);
+        else if (pd < bot.cfg.dive.radius) {
+          this.onPlayerHit(Math.round(bot.cfg.dive.dmg * 0.6), 'blast', null);
+        }
+      }
+      for (const b of this.bots) {
+        if (!b.alive || b === bot) continue;
+        if (b.group.position.distanceTo(p) < bot.cfg.dive.radius) this.damage(b, 45);
+      }
+    }
+    // volatile elites leave a live charge behind — move!
+    if (bot.elite === 'volatile') {
+      this.spawnStrike(bot.group.position.x, bot.group.position.z, 35, 4, 0.6);
+    }
     this.removeBot(bot);
   }
 
   update(dt, player, waveNum) {
     this.waveNum = waveNum;
+    this.playerRef = player;
     this.spawnDelay -= dt;
     while (this.spawnQueue.length && this.spawnDelay <= 0) {
       this.spawnBot(this.spawnQueue.shift(), null, player.position);
@@ -513,21 +574,7 @@ export class BotManager {
     for (let i = 0; i < cfg.n; i++) {
       const x = player.position.x + (i === 0 ? 0 : (Math.random() - 0.5) * 11);
       const z = player.position.z + (i === 0 ? 0 : (Math.random() - 0.5) * 11);
-      const y = this.surfaceHeightAt(x, z);
-      const ring = new THREE.Mesh(
-        new THREE.RingGeometry(0.88, 1, 48),
-        new THREE.MeshBasicMaterial({
-          color: 0xff2222, transparent: true, opacity: 0.85, side: THREE.DoubleSide,
-        })
-      );
-      ring.rotation.x = -Math.PI / 2;
-      ring.position.set(x, y + 0.06, z);
-      this.scene.add(ring);
-      this.strikes.push({
-        x, z, y, ring,
-        t: cfg.telegraph + i * 0.25, max: cfg.telegraph,
-        dmg: cfg.dmg, radius: cfg.radius,
-      });
+      this.spawnStrike(x, z, cfg.dmg, cfg.radius, cfg.telegraph + i * 0.25);
     }
     this.sounds.artilleryWarn();
   }
@@ -577,7 +624,7 @@ export class BotManager {
     }
     if (bot.meleePulse > 0) {
       bot.meleePulse -= dt;
-      bot.group.scale.setScalar(cfg.scale * (1 + Math.max(0, bot.meleePulse) * 1.2));
+      bot.group.scale.setScalar(bot.baseScale * (1 + Math.max(0, bot.meleePulse) * 1.2));
     }
     bot.body.position.y = 0.85 + Math.sin(bot.time * 7) * 0.03;
 
@@ -608,6 +655,12 @@ export class BotManager {
     if (bot.strafeTimer <= 0) {
       bot.strafeDir = Math.random() < 0.5 ? -1 : 1;
       bot.strafeTimer = cfg.ai === 'rush' ? 0.4 + Math.random() * 0.5 : 1.5 + Math.random() * 2.5;
+    }
+
+    // wasps fly — their whole life is orbit high, then dive-bomb
+    if (cfg.ai === 'wasp') {
+      if (!stunned) this.updateWasp(bot, dt, player, cfg);
+      return;
     }
 
     // --- movement ---
@@ -737,7 +790,7 @@ export class BotManager {
     }
     const len = Math.hypot(moveX, moveZ);
     if (len > 0.01) {
-      const sp = cfg.speed * speedMult * this.speedScale * dt;
+      const sp = cfg.speed * bot.speedMod * speedMult * this.speedScale * dt;
       pos.x += (moveX / len) * sp;
       pos.z += (moveZ / len) * sp;
     }
@@ -879,6 +932,70 @@ export class BotManager {
     if (cfg.aimed) {
       this.updateAimedShot(bot, dt, player, dist, targetPos);
     }
+  }
+
+  updateWasp(bot, dt, player, cfg) {
+    const pos = bot.group.position;
+    if (bot.state !== 'dive') {
+      // circle high above the player, buzzing, until it's time
+      bot.orbitAngle += dt * 0.9;
+      _v.set(
+        player.position.x + Math.cos(bot.orbitAngle) * 13 - pos.x,
+        player.position.y - this.playerEye + 9 + Math.sin(bot.time * 3) * 0.6 - pos.y,
+        player.position.z + Math.sin(bot.orbitAngle) * 13 - pos.z
+      );
+      const d = _v.length();
+      if (d > 0.1) {
+        pos.addScaledVector(
+          _v.divideScalar(d),
+          Math.min(d, cfg.speed * bot.speedMod * this.speedScale * dt)
+        );
+      }
+      if (bot.wings) for (const w of bot.wings) w.rotation.x = Math.sin(bot.time * 40) * 0.5;
+      bot.diveTimer -= dt;
+      if (bot.diveTimer <= 0) {
+        bot.state = 'dive';
+        bot.diveVel = null;
+        this.sounds.waspDive();
+      }
+    } else {
+      _v.copy(player.position).sub(pos);
+      const d = _v.length();
+      _v.divideScalar(d || 1);
+      if (!bot.diveVel) {
+        bot.diveVel = _v.clone().multiplyScalar(cfg.dive.speed);
+      } else {
+        _v.multiplyScalar(cfg.dive.speed);
+        bot.diveVel.lerp(_v, Math.min(1, dt * 2.2)); // weak homing — strafe to dodge
+      }
+      pos.addScaledVector(bot.diveVel, dt * this.speedScale * bot.speedMod);
+      bot.group.lookAt(pos.x + bot.diveVel.x, pos.y + bot.diveVel.y, pos.z + bot.diveVel.z);
+      if (d < 1.5 || pos.y < 0.25) {
+        this.destroy(bot); // detonates (splash handled in destroy)
+        return;
+      }
+      for (const b of this.boxes) {
+        if (b.containsPoint(pos)) {
+          this.destroy(bot);
+          return;
+        }
+      }
+    }
+    clampToArena(pos, 0.5);
+  }
+
+  spawnStrike(x, z, dmg, radius, telegraph) {
+    const y = this.surfaceHeightAt(x, z);
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.88, 1, 48),
+      new THREE.MeshBasicMaterial({
+        color: 0xff2222, transparent: true, opacity: 0.85, side: THREE.DoubleSide,
+      })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(x, y + 0.06, z);
+    this.scene.add(ring);
+    this.strikes.push({ x, z, y, ring, t: telegraph, max: telegraph, dmg, radius });
   }
 
   checkLOS(bot, playerPos) {
