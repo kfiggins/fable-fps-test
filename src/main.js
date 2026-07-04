@@ -32,16 +32,44 @@ const DRONE_RATE_MAX = 3;
 const COST_DRONE_TWIN = 150;
 const COST_DRONE_REPAIR = 150;
 
-function mix(g, r, s, t, w = 0) {
+// --- maps & unlocks ---
+function fnv(str) {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h.toString(36);
+}
+const unlockSig = () => fnv('mfps-unlock-foundry|q7k2z');
+function foundryUnlocked() {
+  try {
+    return localStorage.getItem('minifps-unlock2') === unlockSig();
+  } catch {
+    return false;
+  }
+}
+const MAP_ID = (() => {
+  try {
+    const m = localStorage.getItem('minifps-map');
+    return m === 'foundry' && foundryUnlocked() ? 'foundry' : 'arena';
+  } catch {
+    return 'arena';
+  }
+})();
+
+function mix(g, r, s, t, w = 0, sc = 0, sl = 0) {
   return [
     ...Array(g).fill('grunt'),
     ...Array(r).fill('rusher'),
     ...Array(s).fill('sniper'),
     ...Array(t).fill('tank'),
     ...Array(w).fill('wasp'),
+    ...Array(sc).fill('scorcher'),
+    ...Array(sl).fill('slag'),
   ];
 }
-const WAVES = [
+const WAVES_ARENA = [
   mix(4, 0, 0, 0),
   mix(5, 2, 0, 0),
   mix(4, 3, 2, 0),
@@ -73,6 +101,52 @@ const WAVES = [
   mix(12, 13, 8, 8, 7),
   ['apex', 'tank', 'tank', 'sniper', 'sniper', 'rusher', 'rusher', 'wasp', 'wasp'],
 ];
+
+const WAVES_FOUNDRY = [
+  mix(5, 2, 0, 0, 0, 1, 0),
+  mix(5, 3, 1, 0, 0, 2, 0),
+  mix(5, 3, 2, 1, 1, 2, 1),
+  mix(6, 4, 2, 2, 2, 2, 1),
+  ['smelter', 'rusher', 'rusher', 'scorcher'],
+  mix(6, 5, 3, 2, 2, 2, 2),
+  mix(6, 5, 3, 3, 3, 3, 2),
+  mix(7, 6, 4, 3, 3, 3, 2),
+  mix(7, 6, 4, 4, 4, 3, 3),
+  ['forgemaster', 'wasp', 'wasp', 'slag'],
+  mix(8, 7, 4, 4, 4, 3, 3),
+  mix(8, 7, 5, 4, 4, 4, 3),
+  mix(9, 8, 5, 5, 5, 4, 3),
+  mix(9, 8, 5, 5, 5, 4, 4),
+  ['vulcan', 'sniper', 'sniper', 'scorcher', 'scorcher'],
+  mix(10, 9, 5, 5, 5, 4, 4),
+  mix(10, 9, 6, 6, 6, 4, 4),
+  mix(10, 10, 6, 6, 6, 5, 4),
+  mix(11, 10, 6, 6, 6, 5, 4),
+  ['golem', 'slag', 'slag', 'tank', 'tank'],
+  mix(11, 10, 6, 6, 7, 5, 4),
+  mix(11, 11, 7, 6, 7, 5, 4),
+  mix(11, 11, 7, 7, 7, 5, 5),
+  mix(12, 11, 7, 7, 7, 5, 5),
+  ['scorchtwin', 'slagtwin', 'wasp', 'wasp', 'rusher', 'rusher'],
+  mix(12, 12, 7, 7, 8, 6, 5),
+  mix(12, 12, 8, 8, 8, 6, 5),
+  mix(13, 12, 8, 8, 8, 6, 6),
+  mix(13, 13, 8, 8, 9, 6, 6),
+  ['omegaforge', 'scorcher', 'scorcher', 'slag', 'slag', 'wasp', 'wasp'],
+];
+
+const MAPS = {
+  arena: {
+    name: 'THE ARENA', waves: WAVES_ARENA,
+    eliteFrom: 16, mutatorChance: 0.25, diff: 1, bestKey: 'minifps-best',
+  },
+  foundry: {
+    name: 'THE FOUNDRY', waves: WAVES_FOUNDRY,
+    eliteFrom: 10, mutatorChance: 0.4, diff: 1.25, bestKey: 'minifps-best-foundry',
+  },
+};
+const MAP = MAPS[MAP_ID];
+const WAVES = MAP.waves;
 const FINAL_WAVE = WAVES.length;
 
 // wave mutators: occasional non-boss waves play by different rules
@@ -83,7 +157,7 @@ const MUTATORS = {
 };
 
 // scrap dropped per kill (when the roll hits)
-const SCRAP_VALUES = { grunt: 10, rusher: 12, sniper: 15, tank: 25, wasp: 12 };
+const SCRAP_VALUES = { grunt: 10, rusher: 12, sniper: 15, tank: 25, wasp: 12, scorcher: 18, slag: 20 };
 const SCRAP_BOSS = 150;
 
 // --- renderer / scene ---
@@ -103,8 +177,19 @@ const camera = new THREE.PerspectiveCamera(
 );
 scene.add(camera);
 
-const world = createWorld(scene);
+const world = createWorld(scene, MAP_ID);
+// snapshot this map's lighting so mutators can restore it faithfully
+const ENV = {
+  bg: scene.background.getHex(),
+  fogColor: scene.fog.color.getHex(),
+  fogNear: scene.fog.near,
+  fogFar: scene.fog.far,
+  hemi: world.hemi.intensity,
+  sun: world.sun.intensity,
+};
 const player = new Player(camera);
+player.spawn = world.playerSpawn;
+player.reset();
 const effects = new Effects(scene);
 const sounds = new Sounds();
 const bots = new BotManager(scene, world, effects, sounds);
@@ -212,6 +297,7 @@ const ovPrompt = overlay.querySelector('.prompt');
 const upgradeScreen = el('upgrade-screen');
 const upgradeTitle = el('upgrade-title');
 const upgradeCards = el('upgrade-cards');
+const mapSelect = el('map-select');
 const shopBar = el('shop');
 const scopeOverlay = el('scope');
 const crosshair = el('crosshair');
@@ -265,6 +351,8 @@ let jetSoundAcc = 0;
 let armor = 0; // scrap-bought, absorbs damage first, never regenerates
 let mutator = null; // active wave mutator key or null
 let droneRateUps = 0;
+let lavaCd = 0;
+let emberT = 0;
 
 function offerLocked() {
   return performance.now() - offerOpenedAt < 700;
@@ -346,7 +434,7 @@ function updateBuildStrip() {
   }
 }
 
-const BEST_KEY = 'minifps-best';
+const BEST_KEY = MAP.bestKey;
 // best-score records are checksummed — hand-edited localStorage gets discarded
 function bestSig(s, w) {
   let h = 2166136261 >>> 0;
@@ -478,6 +566,8 @@ function startGame() {
   shake = 0;
   feed.innerHTML = '';
   upgradeScreen.classList.add('hidden');
+  bots.mapDiff = MAP.diff;
+  bots.eliteFromWave = MAP.eliteFrom;
   state = 'playing';
   startWave(1);
 }
@@ -502,12 +592,12 @@ function applyMutator(m) {
 
 function clearMutator() {
   mutator = null;
-  scene.fog.near = 70;
-  scene.fog.far = 170;
-  scene.fog.color.setHex(0x8db8d8);
-  scene.background.setHex(0x8db8d8);
-  world.hemi.intensity = 0.9;
-  world.sun.intensity = 1.6;
+  scene.fog.near = ENV.fogNear;
+  scene.fog.far = ENV.fogFar;
+  scene.fog.color.setHex(ENV.fogColor);
+  scene.background.setHex(ENV.bg);
+  world.hemi.intensity = ENV.hemi;
+  world.sun.intensity = ENV.sun;
 }
 
 function startWave(n) {
@@ -516,7 +606,7 @@ function startWave(n) {
   interTimer = 3;
   clearMutator();
   const isBoss = WAVES[n - 1].some((t) => BOT_TYPES[t].boss);
-  if (!isBoss && n >= 4 && Math.random() < 0.25) {
+  if (!isBoss && n >= 4 && Math.random() < MAP.mutatorChance) {
     const keys = Object.keys(MUTATORS);
     applyMutator(keys[Math.floor(Math.random() * keys.length)]);
   }
@@ -808,16 +898,27 @@ function endGame(won) {
         return n > 1 ? `${u.name} ×${n}` : u.name;
       }).join(' · ')
     : 'no upgrades';
+  let msg = won
+    ? `ALL ${FINAL_WAVE} WAVES CLEARED · SCORE ${score.toLocaleString()}`
+    : `WAVE ${waveNum} · SCORE ${score.toLocaleString()}`;
+  if (won && MAP_ID === 'arena') {
+    try {
+      localStorage.setItem('minifps-unlock2', unlockSig());
+    } catch {}
+    msg += '<br />🔓 THE FOUNDRY IS UNLOCKED';
+  } else if (won && MAP_ID === 'foundry') {
+    msg += '<br />MAP 3 — COMING SOON…';
+  }
   if (won) sounds.victory();
   showOverlay(
     won ? 'VICTORY' : 'YOU DIED',
-    won
-      ? `ALL ${FINAL_WAVE} WAVES CLEARED · SCORE ${score.toLocaleString()}`
-      : `WAVE ${waveNum} · SCORE ${score.toLocaleString()}`,
+    msg,
     `${kills} kills · best score ${Math.max(best.score, score).toLocaleString()}<br />${buildSummary}`,
     won ? 'CLICK TO PLAY AGAIN' : 'CLICK TO RETRY',
     runStatsHtml()
   );
+  initMapCards();
+  mapSelect.classList.remove('hidden');
 }
 
 // --- pointer lock ---
@@ -836,6 +937,7 @@ document.addEventListener('pointerlockchange', () => {
   if (!locked && state === 'playing' && waveState !== 'upgrade') {
     state = 'paused';
     firing = false;
+    mapSelect.classList.add('hidden');
     showOverlay(
       'PAUSED',
       `WAVE ${waveNum} · SCORE ${score.toLocaleString()} · SCRAP ${scrap}`,
@@ -1236,7 +1338,10 @@ bots.onPlayerHit = (dmg, kind, sourceBot) => {
   addShake(
     kind === 'shock' || kind === 'blast' ? 1.3 : kind === 'melee' ? 0.7 : 0.35 + final / 60
   );
-  if (final > 0) sounds.hurt();
+  if (final > 0) {
+    if (kind === 'burn') sounds.sizzle();
+    else sounds.hurt();
+  }
   if (stats.adrenalSurge) surgeTimer = 3;
   const dead = player.takeDamage(final);
   if (dead) {
@@ -1442,6 +1547,9 @@ if (IS_DEV_HOST) window.__game = {
     mech() { if (!mech.active) mech.enter(); },
     mutate(m) { clearMutator(); if (m) applyMutator(m); },
     getMutator: () => mutator,
+    mapId: MAP_ID,
+    unlockFoundry() { localStorage.setItem('minifps-unlock2', unlockSig()); },
+    setMap(m) { localStorage.setItem('minifps-map', m); },
     mechState: () => (mech.active ? { hp: mech.hp, maxHp: mech.maxHp, cds: { ...mech.cds } } : null),
     mechDamage(n) { mech.damage(n); },
     addDrone() { return drones.add(); },
@@ -1501,6 +1609,43 @@ renderer.setAnimationLoop(() => {
 
     // Time Dilation and FRENZY both scale enemy speed
     bots.speedScale = stats.enemySlow * (mutator === 'frenzy' ? 1.3 : 1);
+
+    // magnet bosses drag you toward them — fight it or fly
+    if (bots.playerPull) {
+      player.velocity.x = bots.playerPull.x * bots.playerPull.force;
+      player.velocity.z = bots.playerPull.z * bots.playerPull.force;
+    }
+
+    // molten channels burn anyone standing in them
+    if (world.hazards.length) {
+      lavaCd = Math.max(0, lavaCd - dt);
+      const feet = player.position.y - player.eye;
+      if (feet < 0.4 && lavaCd <= 0) {
+        for (const h of world.hazards) {
+          if (
+            player.position.x > h.minX && player.position.x < h.maxX &&
+            player.position.z > h.minZ && player.position.z < h.maxZ
+          ) {
+            lavaCd = 0.3;
+            bots.onPlayerHit(9, 'burn', null);
+            break;
+          }
+        }
+      }
+      // ambient embers
+      emberT -= dt;
+      if (emberT <= 0) {
+        emberT = 0.35;
+        const h = world.hazards[Math.floor(Math.random() * world.hazards.length)];
+        effects.burst(
+          new THREE.Vector3(
+            h.minX + Math.random() * (h.maxX - h.minX), 0.4,
+            h.minZ + Math.random() * (h.maxZ - h.minZ)
+          ),
+          0xff7a1a, 3, 2.2, 0.5
+        );
+      }
+    }
 
     if (waveState === 'intermission') {
       interTimer -= dt;
@@ -1585,9 +1730,37 @@ renderer.setAnimationLoop(() => {
 });
 
 viewmodels.rifle.visible = true;
+
+// --- map selection cards ---
+function initMapCards() {
+  for (const card of mapSelect.querySelectorAll('.map-card')) {
+    const m = card.dataset.map;
+    card.classList.toggle('selected', m === MAP_ID);
+    if (m === 'foundry') {
+      const unlocked = foundryUnlocked();
+      card.classList.toggle('locked', !unlocked);
+      el('foundry-sub').textContent = unlocked ? '30 WAVES · HARDER' : '🔒 BEAT THE ARENA';
+    }
+  }
+}
+mapSelect.addEventListener('click', (e) => {
+  const card = e.target.closest('.map-card');
+  if (!card) return;
+  e.stopPropagation(); // don't trigger the overlay's start-game click
+  const m = card.dataset.map;
+  if (!m || card.classList.contains('locked') || card.classList.contains('soon')) return;
+  if (m !== MAP_ID) {
+    try {
+      localStorage.setItem('minifps-map', m);
+    } catch {}
+    location.reload();
+  }
+});
+initMapCards();
+
 {
   const best = loadBest();
-  if (best.score > 0) {
-    ovMsg.innerHTML = `${FINAL_WAVE} waves. Six bosses. They shoot back.<br />BEST: ${best.score.toLocaleString()} (wave ${best.wave})`;
-  }
+  ovMsg.innerHTML =
+    `${MAP.name} — ${FINAL_WAVE} waves. They shoot back.` +
+    (best.score > 0 ? `<br />BEST: ${best.score.toLocaleString()} (wave ${best.wave})` : '');
 }

@@ -1,7 +1,7 @@
 # Mini FPS
 
 A tiny browser-based roguelike first-person shooter built with [Three.js](https://threejs.org/)
-and Vite. Survive **30 waves** in a walled arena — climb the towers, hold the three-story
+and Vite. Two maps, **30 waves** each: survive the Arena, unlock **THE FOUNDRY** — climb the towers, hold the three-story
 building, build a run out of upgrades, and take down six bosses along the way.
 Play it at **https://kfiggins.github.io/fable-fps-test/**.
 

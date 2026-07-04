@@ -248,6 +248,27 @@ export class Sounds {
     this.sweep('sawtooth', 350, 950, 0.55, 0.25);
   }
 
+  flame() {
+    this.noise(0.14, 0.1);
+  }
+
+  lob() {
+    this.sweep('sine', 260, 130, 0.25, 0.3);
+  }
+
+  spinup() {
+    this.sweep('sawtooth', 90, 480, 0.55, 0.3);
+  }
+
+  magnetHum() {
+    this.sweep('sine', 220, 90, 0.85, 0.4);
+    this.sweep('sine', 330, 140, 0.85, 0.25, 0.05);
+  }
+
+  sizzle() {
+    this.noise(0.1, 0.12);
+  }
+
   victory() {
     this.sweep('sine', 520, 520, 0.14, 0.4);
     this.sweep('sine', 660, 660, 0.14, 0.4, 0.15);

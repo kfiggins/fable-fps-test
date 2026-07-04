@@ -34,6 +34,17 @@ export const BOT_TYPES = {
     ai: 'wasp', fly: true,
     dive: { dmg: 35, radius: 3, speed: 17 },
   },
+  // ---- foundry enemies ----
+  scorcher: {
+    hp: 140, speed: 3.4, scale: 1.1, points: 200, color: 0x7a4a1e, visor: 0xff7a1a,
+    ai: 'skirmish', range: [3, 6], wide: true, scalesHp: true,
+    flame: { dps: 20, range: 8 },
+  },
+  slag: {
+    hp: 180, speed: 2.6, scale: 1.2, points: 250, color: 0x5a3a3a, visor: 0xffb347,
+    ai: 'skirmish', range: [14, 26], scalesHp: true,
+    lob: { dmg: 22, patchDps: 15, patchR: 2.4, patchT: 4, interval: [3.5, 5] },
+  },
   warden: {
     hp: 2200, speed: 2.4, scale: 2.2, points: 2000, color: 0x8a1f2d, visor: 0xffd24d,
     ai: 'skirmish', range: [7, 16], wide: true, boss: true, name: 'THE WARDEN',
@@ -95,6 +106,67 @@ export const BOT_TYPES = {
     missiles: { n: 3, dmg: 35, radius: 3.5, interval: [7, 10] },
     artillery: { n: 5, dmg: 50, radius: 5, telegraph: 1.6, interval: [8, 11] },
     enrage: { below: 0.45, speed: 1.35, rate: 1.5 },
+  },
+  // ---- foundry bosses ----
+  smelter: {
+    hp: 2800, speed: 2.9, scale: 2.3, points: 2500, color: 0x8a3a10, visor: 0xffa030,
+    ai: 'skirmish', range: [4, 9], wide: true, boss: true, name: 'THE SMELTER',
+    flame: { dps: 26, range: 10 },
+    lob: { n: 3, dmg: 24, patchDps: 16, patchR: 2.6, patchT: 4, interval: [5, 7] },
+    trail: { interval: 1.1, patchDps: 14, patchR: 1.8, patchT: 3 },
+    summon: { types: ['rusher', 'rusher'], cd: 13, max: 4 },
+  },
+  forgemaster: {
+    hp: 6500, speed: 2.5, scale: 2.6, points: 6000, color: 0x3a4252, visor: 0x7fd8ff,
+    ai: 'skirmish', range: [8, 16], wide: true, boss: true, name: 'THE FORGEMASTER',
+    burst: { n: 8, gap: 0.09, dmg: [7, 10], spread: 0.05, interval: [2.6, 3.4] },
+    magnet: { interval: [8, 11], telegraph: 0.9, pullTime: 0.7, force: 17 },
+    shock: { dmg: 40, radius: 8, trigger: 6, cd: 4 },
+    summon: { types: ['wasp', 'wasp'], cd: 12, max: 4 },
+  },
+  vulcan: {
+    hp: 12500, speed: 3.1, scale: 2.6, points: 12000, color: 0x2e3138, visor: 0xff3333,
+    ai: 'skirmish', range: [10, 20], wide: true, boss: true, name: 'VULCAN',
+    burst: { n: 26, gap: 0.055, dmg: [5, 7], spread: 0.065, interval: [4, 6], spinup: true },
+    summon: { types: ['sniper', 'scorcher'], cd: 13, max: 4 },
+    enrage: { below: 0.4, speed: 1.3, rate: 1.35 },
+  },
+  golem: {
+    hp: 22000, speed: 2.2, scale: 3.4, points: 24000, color: 0x4a2a12, visor: 0xff6a1a,
+    ai: 'skirmish', range: [4, 10], wide: true, spike: true, boss: true, name: 'CRUCIBLE GOLEM',
+    melee: { dmg: 26, range: 3.8, cd: 1.3 },
+    shock: { dmg: 45, radius: 9, trigger: 7, cd: 5 },
+    lavaRings: { patchDps: 18, patchT: 3 },
+    lob: { n: 4, dmg: 26, patchDps: 16, patchR: 2.6, patchT: 4, interval: [6, 8] },
+    summon: { types: ['slag', 'rusher'], cd: 14, max: 4 },
+    enrage: { below: 0.4, speed: 1.35, rate: 1.4 },
+  },
+  scorchtwin: {
+    hp: 13000, speed: 4, scale: 2.2, points: 15000, color: 0xa04a10, visor: 0xffa030,
+    ai: 'skirmish', range: [3, 8], wide: true, spike: true, boss: true, name: 'SCORCH',
+    flame: { dps: 30, range: 11 },
+    melee: { dmg: 24, range: 3.4, cd: 1.2 },
+    trail: { interval: 1, patchDps: 15, patchR: 1.8, patchT: 3 },
+    enrage: { below: 0.35, speed: 1.35, rate: 1.4 },
+  },
+  slagtwin: {
+    hp: 13000, speed: 2.6, scale: 2.2, points: 15000, color: 0x6a3a4a, visor: 0xffb347,
+    ai: 'skirmish', range: [14, 24], wide: true, boss: true, name: 'SLAG',
+    burst: { n: 6, gap: 0.09, dmg: [7, 10], spread: 0.05, interval: [3, 4] },
+    lob: { n: 4, dmg: 26, patchDps: 16, patchR: 2.8, patchT: 4.5, interval: [4, 6] },
+    summon: { types: ['wasp', 'scorcher'], cd: 14, max: 4 },
+    enrage: { below: 0.35, speed: 1.3, rate: 1.4 },
+  },
+  omegaforge: {
+    hp: 40000, speed: 2.5, scale: 4, points: 80000, color: 0x1a1006, visor: 0xffcc00,
+    ai: 'skirmish', range: [8, 18], wide: true, boss: true, name: 'THE OMEGA FORGE',
+    burst: { n: 22, gap: 0.06, dmg: [6, 9], spread: 0.06, interval: [3.5, 5], spinup: true },
+    magnet: { interval: [9, 12], telegraph: 0.9, pullTime: 0.7, force: 17 },
+    lob: { n: 5, dmg: 28, patchDps: 18, patchR: 2.8, patchT: 4.5, interval: [6, 8] },
+    shock: { dmg: 50, radius: 10, trigger: 7.5, cd: 4 },
+    lavaRings: { patchDps: 20, patchT: 3 },
+    summon: { types: ['scorcher', 'slag', 'wasp'], cd: 11, max: 6 },
+    enrage: { below: 0.45, speed: 1.3, rate: 1.45 },
   },
 };
 
@@ -224,6 +296,12 @@ class Bot {
     this.artilleryTimer = 5;
     this.teleTimer = 4;
     this.stunTimer = 0;
+    this.flameTick = 0;
+    this.lobTimer = 3 + Math.random() * 2;
+    this.trailTimer = 1;
+    this.magnetTimer = 6;
+    this.magnetState = null;
+    this.burnTick = 0;
   }
 }
 
@@ -243,26 +321,32 @@ export class BotManager {
     this.bots = [];
     this.spawnQueue = [];
     this.spawnDelay = 0;
-    this.boss = null;
     this.waveNum = 1;
     this.speedScale = 1; // Time Dilation upgrade
-    this.projectiles = []; // boss orbs + missiles
+    this.projectiles = []; // boss orbs + missiles + slag globs
     this.strikes = []; // artillery telegraphs
+    this.patches = []; // burning ground patches
     this.shield = null; // player Bubble Shield: { center, radius }
     this.decoyPos = null; // player Decoy: bots aim here instead
     this.onShieldHit = null; // (dmg, point) => {}
+    this.playerPull = null; // magnet bosses set this; main applies it
     // player target profile — grows while piloting the mech
     this.playerEye = 1.7;
     this.playerBodyOffset = 0.35;
     this.playerHitRadius = 0.5;
+    // per-map tuning (main sets these at run start)
+    this.mapDiff = 1;
+    this.eliteFromWave = 16;
+    this.hazards = world.hazards || [];
+    this.playerBurnCd = 0;
   }
 
   hpMult() {
-    return 1 + (this.waveNum - 1) * 0.04;
+    return (1 + (this.waveNum - 1) * 0.04) * this.mapDiff;
   }
 
   dmgMult() {
-    return 1 + (this.waveNum - 1) * 0.03;
+    return (1 + (this.waveNum - 1) * 0.03) * this.mapDiff;
   }
 
   get waveDone() {
@@ -281,11 +365,22 @@ export class BotManager {
     for (const bot of this.bots) this.removeBot(bot);
     this.bots = [];
     this.spawnQueue = [];
-    this.boss = null;
     for (const p of this.projectiles) this.scene.remove(p.mesh);
     this.projectiles = [];
     for (const s of this.strikes) this.scene.remove(s.ring);
     this.strikes = [];
+    for (const p of this.patches) this.scene.remove(p.mesh);
+    this.patches = [];
+    this.playerPull = null;
+  }
+
+  // healthiest alive boss (twins-aware) — the HUD boss bar reads this
+  get boss() {
+    let best = null;
+    for (const b of this.bots) {
+      if (b.alive && b.cfg.boss && (!best || b.health > best.health)) best = b;
+    }
+    return best;
   }
 
   startWave(spec, playerPos) {
@@ -319,8 +414,8 @@ export class BotManager {
       bot.maxHealth = Math.round(bot.cfg.hp * this.hpMult());
       bot.health = bot.maxHealth;
     }
-    // elites: wave 16+, golden glow, one random perk, triple scrap
-    if (this.waveNum >= 16 && !isMinion && !bot.cfg.boss && Math.random() < 0.08) {
+    // elites: golden glow, one random perk, triple scrap
+    if (this.waveNum >= this.eliteFromWave && !isMinion && !bot.cfg.boss && Math.random() < 0.08) {
       const mods = ['juggernaut', 'swift', 'volatile'];
       bot.elite = mods[Math.floor(Math.random() * mods.length)];
       if (bot.elite === 'juggernaut') {
@@ -353,7 +448,6 @@ export class BotManager {
     this.bots.push(bot);
     this.effects.beam(bot.group.position, bot.cfg.visor);
     if (bot.cfg.boss) {
-      this.boss = bot;
       this.sounds.bossRoar();
     } else if (isMinion) {
       this.sounds.summon();
@@ -396,7 +490,8 @@ export class BotManager {
     if (bot.health <= 0) {
       const wasBoss = bot.cfg.boss;
       this.destroy(bot);
-      if (wasBoss) {
+      // field wipe only when the LAST boss falls (the twins share a wave)
+      if (wasBoss && !this.bots.some((b) => b.alive && b.cfg.boss)) {
         for (const b of this.bots) {
           if (b.alive) this.destroy(b);
         }
@@ -413,7 +508,6 @@ export class BotManager {
     center.y += 1 * bot.cfg.scale;
     this.effects.explosion(center, 0xff5533, bot.cfg.boss ? 3 : bot.cfg.scale);
     this.effects.debris(center, bot.cfg.color, bot.cfg.boss ? 14 : 6, bot.cfg.scale);
-    if (bot === this.boss) this.boss = null;
     // wasps go out with a bang — hurting the player if close and chaining
     // into their own allies (no player kill credit for chained deaths)
     if (bot.cfg.dive) {
@@ -437,6 +531,8 @@ export class BotManager {
     if (bot.elite === 'volatile') {
       this.spawnStrike(bot.group.position.x, bot.group.position.z, 35, 4, 0.6);
     }
+    // dying magnet boss releases its grip
+    if (bot.magnetState) this.playerPull = null;
     this.removeBot(bot);
   }
 
@@ -454,6 +550,73 @@ export class BotManager {
     }
     this.updateProjectiles(dt, player);
     this.updateStrikes(dt, player);
+    this.updatePatches(dt, player);
+  }
+
+  // --- burning ground patches (slag globs, boss trails, lava rings) ---
+  spawnPatch(x, z, dps, r, t) {
+    const y = this.surfaceHeightAt(x, z);
+    const mesh = new THREE.Mesh(
+      new THREE.CircleGeometry(r, 20),
+      new THREE.MeshBasicMaterial({
+        color: 0xff6a1a, transparent: true, opacity: 0.75, side: THREE.DoubleSide,
+      })
+    );
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(x, y + 0.05, z);
+    this.scene.add(mesh);
+    this.patches.push({ x, z, y, r, dps, t, max: t, mesh });
+  }
+
+  updatePatches(dt, player) {
+    this.playerBurnCd = Math.max(0, this.playerBurnCd - dt);
+    for (let i = this.patches.length - 1; i >= 0; i--) {
+      const p = this.patches[i];
+      p.t -= dt;
+      if (p.t <= 0) {
+        this.scene.remove(p.mesh);
+        p.mesh.geometry.dispose();
+        p.mesh.material.dispose();
+        this.patches.splice(i, 1);
+        continue;
+      }
+      p.mesh.material.opacity = 0.45 + 0.3 * Math.sin(p.t * 9) + 0.2 * (p.t / p.max);
+      if (this.playerBurnCd <= 0 && this.onPlayerHit) {
+        const feet = player.position.y - this.playerEye;
+        const dx = player.position.x - p.x;
+        const dz = player.position.z - p.z;
+        if (dx * dx + dz * dz < p.r * p.r && Math.abs(feet - p.y) < 1.2) {
+          this.playerBurnCd = 0.35;
+          this.onPlayerHit(Math.round(p.dps * 0.35), 'burn', null);
+        }
+      }
+    }
+  }
+
+  // molten-arc lob (slag enemies + fire bosses)
+  spawnGlob(bot, cfg, targetPos) {
+    _muzzle.set(0, 1.6, 0.4);
+    bot.group.localToWorld(_muzzle);
+    const dx = targetPos.x - _muzzle.x;
+    const dz = targetPos.z - _muzzle.z;
+    const dy = targetPos.y - this.playerEye - _muzzle.y;
+    const d = Math.hypot(dx, dz);
+    const T = Math.max(0.7, Math.min(1.6, d / 14));
+    const mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(0.32, 10, 8),
+      new THREE.MeshStandardMaterial({
+        color: 0xff6a1a, emissive: 0xff4400, emissiveIntensity: 1.1,
+      })
+    );
+    mesh.position.copy(_muzzle);
+    this.scene.add(mesh);
+    this.projectiles.push({
+      mesh, type: 'glob',
+      dmg: cfg.dmg, patch: cfg,
+      vel: new THREE.Vector3(dx / T, dy / T + 0.5 * 20 * T, dz / T),
+      life: 4,
+    });
+    this.sounds.lob();
   }
 
   // --- boss projectiles: slow orbs (strafe them) and missiles (break LOS) ---
@@ -493,6 +656,9 @@ export class BotManager {
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const p = this.projectiles[i];
       p.life -= dt;
+      if (p.type === 'glob') {
+        p.vel.y -= 20 * dt;
+      }
       if (p.type === 'missile') {
         p.phase -= dt;
         if (p.phase <= 0) {
@@ -550,6 +716,13 @@ export class BotManager {
           if (d < p.radius && d >= this.playerHitRadius + 0.35 && this.onPlayerHit) {
             this.onPlayerHit(Math.round(p.dmg * 0.7), 'blast', null);
           }
+        } else if (p.type === 'glob') {
+          // splashes down into a burning patch
+          this.effects.explosion(p.mesh.position, 0xff6a1a, 0.7);
+          this.spawnPatch(
+            p.mesh.position.x, p.mesh.position.z,
+            p.patch.patchDps, p.patch.patchR, p.patch.patchT
+          );
         } else {
           this.effects.spark(p.mesh.position, 0xff5533);
         }
@@ -627,6 +800,22 @@ export class BotManager {
       bot.group.scale.setScalar(bot.baseScale * (1 + Math.max(0, bot.meleePulse) * 1.2));
     }
     bot.body.position.y = 0.85 + Math.sin(bot.time * 7) * 0.03;
+
+    // molten floor burns ground units (knockback someone into a channel!)
+    if (!cfg.fly && bot.group.position.y < 0.5 && this.hazards.length) {
+      bot.burnTick -= dt;
+      if (bot.burnTick <= 0) {
+        const bp = bot.group.position;
+        for (const h of this.hazards) {
+          if (bp.x > h.minX && bp.x < h.maxX && bp.z > h.minZ && bp.z < h.maxZ) {
+            bot.burnTick = 0.35;
+            this.effects.spark(new THREE.Vector3(bp.x, bp.y + 0.6, bp.z), 0xff6a1a);
+            if (this.damage(bot, 12)) return; // burned to death
+            break;
+          }
+        }
+      }
+    }
 
     // Decoy redirects aim and movement; real hits still resolve vs the player
     const targetPos = this.decoyPos || playerPos;
@@ -797,6 +986,26 @@ export class BotManager {
     clampToArena(pos, bot.radius);
     collideXZ(pos, bot.radius, pos.y, pos.y + 1.8 * cfg.scale, this.boxes, STEP_HEIGHT);
 
+    // bots won't voluntarily walk into molten channels (bridges are boxes above)
+    if (!cfg.fly && pos.y < 0.3) {
+      for (const h of this.hazards) {
+        const minX = h.minX - bot.radius;
+        const maxX = h.maxX + bot.radius;
+        const minZ = h.minZ - bot.radius;
+        const maxZ = h.maxZ + bot.radius;
+        if (pos.x <= minX || pos.x >= maxX || pos.z <= minZ || pos.z >= maxZ) continue;
+        const dxMin = pos.x - minX;
+        const dxMax = maxX - pos.x;
+        const dzMin = pos.z - minZ;
+        const dzMax = maxZ - pos.z;
+        const m = Math.min(dxMin, dxMax, dzMin, dzMax);
+        if (m === dxMin) pos.x = minX;
+        else if (m === dxMax) pos.x = maxX;
+        else if (m === dzMin) pos.z = minZ;
+        else pos.z = maxZ;
+      }
+    }
+
     // --- vertical physics: gravity, stairs, landing (feet = pos.y) ---
     bot.vy -= GRAVITY * dt;
     pos.y += bot.vy * dt;
@@ -833,6 +1042,18 @@ export class BotManager {
         this.sounds.shockwave();
         if (player.onGround && realDist < cfg.shock.radius && vertGap < 2 && this.onPlayerHit) {
           this.onPlayerHit(cfg.shock.dmg, 'shock', bot);
+        }
+        // Crucible Golem: the slam ignites expanding lava rings
+        if (cfg.lavaRings) {
+          for (const [r, cnt] of [[3.5, 6], [7, 10], [10.5, 13]]) {
+            for (let k = 0; k < cnt; k++) {
+              const a = (k / cnt) * Math.PI * 2 + Math.random() * 0.4;
+              this.spawnPatch(
+                pos.x + Math.cos(a) * r, pos.z + Math.sin(a) * r,
+                cfg.lavaRings.patchDps, 1.7, cfg.lavaRings.patchT
+              );
+            }
+          }
         }
       }
     }
@@ -898,6 +1119,96 @@ export class BotManager {
       }
     }
 
+    // flamethrower: continuous burn inside the cone range
+    if (cfg.flame && bot.hasLOS) {
+      bot.flameTick -= dt;
+      const vertGap = Math.abs(playerPos.y - this.playerEye - pos.y);
+      if (realDist < cfg.flame.range && vertGap < 3 && bot.flameTick <= 0) {
+        bot.flameTick = 0.3;
+        const dmg = Math.round(cfg.flame.dps * 0.3 * (cfg.boss ? 1 : this.dmgMult()));
+        if (this.onPlayerHit) this.onPlayerHit(dmg, 'burn', bot);
+        _muzzle.set(0, 1.2, 0.8);
+        bot.group.localToWorld(_muzzle);
+        _v.copy(player.position).sub(_muzzle).multiplyScalar(0.45).add(_muzzle);
+        this.effects.burst(_v, 0xff7a1a, 6, 3, 0.3);
+        this.sounds.flame();
+      }
+    }
+
+    // molten glob lob — arcs over cover, leaves a burning patch
+    if (cfg.lob) {
+      bot.lobTimer -= dt;
+      if (bot.lobTimer <= 0 && bot.hasLOS && dist > 7 && dist < 42) {
+        const [a, b] = cfg.lob.interval;
+        bot.lobTimer = (a + Math.random() * (b - a)) / rate;
+        const n = cfg.lob.n || 1;
+        const dmg = cfg.boss ? cfg.lob.dmg : Math.round(cfg.lob.dmg * this.dmgMult());
+        for (let i = 0; i < n; i++) {
+          _end.copy(targetPos);
+          if (i > 0) {
+            _end.x += (Math.random() - 0.5) * 7;
+            _end.z += (Math.random() - 0.5) * 7;
+          }
+          this.spawnGlob(bot, { ...cfg.lob, dmg }, _end);
+        }
+      }
+    }
+
+    // burning trail behind fire bosses
+    if (cfg.trail) {
+      bot.trailTimer -= dt;
+      if (bot.trailTimer <= 0) {
+        bot.trailTimer = cfg.trail.interval;
+        this.spawnPatch(pos.x, pos.z, cfg.trail.patchDps, cfg.trail.patchR, cfg.trail.patchT);
+      }
+    }
+
+    // magnet: telegraphed beam, then drags the player toward the boss
+    if (cfg.magnet) {
+      if (!bot.magnetState) {
+        bot.magnetTimer -= dt;
+        if (bot.magnetTimer <= 0 && bot.hasLOS && realDist > 6 && realDist < 45) {
+          const [a, b] = cfg.magnet.interval;
+          bot.magnetTimer = (a + Math.random() * (b - a)) / rate;
+          bot.magnetState = { phase: 'tele', t: cfg.magnet.telegraph };
+          this.sounds.magnetHum();
+        }
+      } else {
+        const st = bot.magnetState;
+        st.t -= dt;
+        if (!bot.laser) {
+          const geo = new THREE.BufferGeometry();
+          geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+          bot.laser = new THREE.Line(
+            geo,
+            new THREE.LineBasicMaterial({ color: 0x9f7fff, transparent: true, opacity: 0.85 })
+          );
+          this.scene.add(bot.laser);
+        }
+        _muzzle.set(0, 1.6, 0.6);
+        bot.group.localToWorld(_muzzle);
+        const arr = bot.laser.geometry.attributes.position.array;
+        arr[0] = _muzzle.x; arr[1] = _muzzle.y; arr[2] = _muzzle.z;
+        arr[3] = player.position.x; arr[4] = player.position.y; arr[5] = player.position.z;
+        bot.laser.geometry.attributes.position.needsUpdate = true;
+        bot.laser.material.color.setHex(st.phase === 'tele' ? 0x9f7fff : 0x7fd8ff);
+        if (st.phase === 'tele' && st.t <= 0) {
+          st.phase = 'pull';
+          st.t = cfg.magnet.pullTime;
+        } else if (st.phase === 'pull') {
+          _v.copy(pos).sub(player.position);
+          _v.y = 0;
+          const dl = _v.length() || 1;
+          this.playerPull = { x: _v.x / dl, z: _v.z / dl, force: cfg.magnet.force };
+          if (st.t <= 0) {
+            bot.magnetState = null;
+            this.playerPull = null;
+            this.clearLaser(bot);
+          }
+        }
+      }
+    }
+
     if (cfg.summon) {
       bot.summonTimer -= dt;
       if (bot.summonTimer <= 0) {
@@ -924,7 +1235,8 @@ export class BotManager {
           const [a, b] = cfg.burst.interval;
           bot.shootTimer = (a + Math.random() * (b - a)) / (bot.enraged ? cfg.enrage.rate : 1);
           bot.burstLeft = cfg.burst.n;
-          bot.burstGap = 0;
+          bot.burstGap = cfg.burst.spinup ? 0.55 : 0;
+          if (cfg.burst.spinup) this.sounds.spinup();
         }
       }
     }

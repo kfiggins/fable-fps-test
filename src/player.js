@@ -48,8 +48,9 @@ export class Player {
   }
 
   reset() {
-    this.camera.position.set(16, this.eye, 16);
-    this.camera.rotation.set(0, -Math.PI / 4, 0);
+    const s = this.spawn || { x: 16, z: 16, yaw: -Math.PI / 4 };
+    this.camera.position.set(s.x, this.eye, s.z);
+    this.camera.rotation.set(0, s.yaw, 0);
     this.velocity.set(0, 0, 0);
     this.health = this.maxHealth;
     this.onGround = true;
