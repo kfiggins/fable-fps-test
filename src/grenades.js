@@ -36,6 +36,13 @@ export class GrenadeManager {
     this.live = [];
   }
 
+  removePickup(p) {
+    const i = this.pickups.indexOf(p);
+    if (i === -1) return;
+    this.scene.remove(p.mesh);
+    this.pickups.splice(i, 1);
+  }
+
   spawnPickup(pos, type = 'grenade', value = 0) {
     const mesh = new THREE.Mesh(
       type === 'scrap' ? this.scrapGeo : this.grenadeGeo,

@@ -131,8 +131,15 @@
     }
 
     #shop {
-      display: flex; gap: 10px; align-items: center; justify-content: center;
-      flex-wrap: wrap; max-width: 900px;
+      display: flex; flex-direction: column; gap: 8px; align-items: center;
+      max-width: 960px;
+    }
+    .shop-group {
+      display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap;
+    }
+    .shop-group-label {
+      font-size: 10px; letter-spacing: 2px;
+      color: #7d8798; min-width: 120px; text-align: right; margin-right: 6px;
     }
     #shop-scrap { font-size: 13px; letter-spacing: 2px; color: #ffc94d; margin-right: 8px; }
     .shop-btn {

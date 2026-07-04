@@ -25,6 +25,80 @@ export class DroneManager {
     this.twin = false;
     this.repair = false;
     this.heal = null; // set by main: (amount) => {}
+    // scrap collector drone (untargetable, just gathers)
+    this.collector = null;
+    this.collectorSpeed = 4.5;
+  }
+
+  addCollector() {
+    if (this.collector) return false;
+    const group = new THREE.Group();
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(0.34, 0.16, 0.34),
+      new THREE.MeshStandardMaterial({ color: 0x8a6410, roughness: 0.4, metalness: 0.6 })
+    );
+    const claw = new THREE.Mesh(
+      new THREE.ConeGeometry(0.12, 0.28, 6),
+      new THREE.MeshStandardMaterial({ color: 0xffc94d, emissive: 0x5a4008, roughness: 0.35, metalness: 0.6 })
+    );
+    claw.rotation.x = Math.PI;
+    claw.position.y = -0.2;
+    group.add(body, claw);
+    const rotors = [];
+    for (const [rx, rz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+      const rotor = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.1, 0.1, 0.015, 8),
+        new THREE.MeshStandardMaterial({ color: 0x222831, roughness: 0.6 })
+      );
+      rotor.position.set(rx * 0.2, 0.1, rz * 0.2);
+      group.add(rotor);
+      rotors.push(rotor);
+    }
+    this.scene.add(group);
+    this.collector = { group, rotors, t: 0 };
+    return true;
+  }
+
+  // wanders to the nearest scrap pickup and hoovers it up
+  updateCollector(dt, player, pickups, onCollect) {
+    const c = this.collector;
+    if (!c) return;
+    c.t += dt;
+    for (const r of c.rotors) r.rotation.y += dt * 26;
+
+    let target = null;
+    let bestD = Infinity;
+    for (const p of pickups) {
+      if (p.type !== 'scrap') continue;
+      const d = c.group.position.distanceTo(p.mesh.position);
+      if (d < bestD) {
+        bestD = d;
+        target = p;
+      }
+    }
+    if (target) {
+      _desired.copy(target.mesh.position);
+      _desired.y += 0.55;
+    } else {
+      // idle: trail behind the player
+      _desired.set(
+        player.position.x - 2.2,
+        player.position.y + 1.4 + Math.sin(c.t * 2.5) * 0.2,
+        player.position.z - 2.2
+      );
+    }
+    _dir.copy(_desired).sub(c.group.position);
+    const d = _dir.length();
+    if (d > 0.05) {
+      c.group.position.addScaledVector(
+        _dir.divideScalar(d),
+        Math.min(d, this.collectorSpeed * dt)
+      );
+    }
+    c.group.rotation.y += dt * 1.2;
+    if (target && c.group.position.distanceTo(target.mesh.position) < 1.1) {
+      onCollect(target);
+    }
   }
 
   count() {
@@ -75,6 +149,15 @@ export class DroneManager {
     this.fireRateMult = 1;
     this.twin = false;
     this.repair = false;
+    if (this.collector) {
+      this.scene.remove(this.collector.group);
+      this.collector.group.traverse((o) => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) o.material.dispose();
+      });
+    }
+    this.collector = null;
+    this.collectorSpeed = 4.5;
   }
 
   update(dt, player, botsList, dealDamage) {

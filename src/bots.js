@@ -322,7 +322,8 @@ export class BotManager {
     this.spawnQueue = [];
     this.spawnDelay = 0;
     this.waveNum = 1;
-    this.speedScale = 1; // Time Dilation upgrade
+    this.speedScale = 1; // FRENZY mutator etc.
+    this.slowMult = 1; // Time Dilation — bosses resist this
     this.projectiles = []; // boss orbs + missiles + slag globs
     this.strikes = []; // artillery telegraphs
     this.patches = []; // burning ground patches
@@ -979,7 +980,7 @@ export class BotManager {
     }
     const len = Math.hypot(moveX, moveZ);
     if (len > 0.01) {
-      const sp = cfg.speed * bot.speedMod * speedMult * this.speedScale * dt;
+      const sp = cfg.speed * bot.speedMod * speedMult * this.speedScale * (cfg.boss ? 1 : this.slowMult) * dt;
       pos.x += (moveX / len) * sp;
       pos.z += (moveZ / len) * sp;
     }
@@ -1260,7 +1261,7 @@ export class BotManager {
       if (d > 0.1) {
         pos.addScaledVector(
           _v.divideScalar(d),
-          Math.min(d, cfg.speed * bot.speedMod * this.speedScale * dt)
+          Math.min(d, cfg.speed * bot.speedMod * this.speedScale * this.slowMult * dt)
         );
       }
       if (bot.wings) for (const w of bot.wings) w.rotation.x = Math.sin(bot.time * 40) * 0.5;
@@ -1280,7 +1281,7 @@ export class BotManager {
         _v.multiplyScalar(cfg.dive.speed);
         bot.diveVel.lerp(_v, Math.min(1, dt * 2.2)); // weak homing — strafe to dodge
       }
-      pos.addScaledVector(bot.diveVel, dt * this.speedScale * bot.speedMod);
+      pos.addScaledVector(bot.diveVel, dt * this.speedScale * this.slowMult * bot.speedMod);
       bot.group.lookAt(pos.x + bot.diveVel.x, pos.y + bot.diveVel.y, pos.z + bot.diveVel.z);
       if (d < 1.5 || pos.y < 0.25) {
         this.destroy(bot); // detonates (splash handled in destroy)

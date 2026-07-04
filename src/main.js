@@ -27,10 +27,12 @@ const JET_UP_MAX = 3;
 const COST_ARMOR = 25;
 const ARMOR_PER_BAR = 25;
 const ARMOR_MAX = ARMOR_PER_BAR * 4;
-const COST_DRONE_RATE = 100;
+const COST_DRONE_RATE = 150;
 const DRONE_RATE_MAX = 3;
-const COST_DRONE_TWIN = 150;
-const COST_DRONE_REPAIR = 150;
+const COST_DRONE_TWIN = 250;
+const COST_COLLECTOR = 300;
+const COST_COLLECTOR_SPEED = 150;
+const COLLECTOR_SPEED_MAX = 3;
 
 // --- maps & unlocks ---
 function fnv(str) {
@@ -351,6 +353,7 @@ let jetSoundAcc = 0;
 let armor = 0; // scrap-bought, absorbs damage first, never regenerates
 let mutator = null; // active wave mutator key or null
 let droneRateUps = 0;
+let collectorSpeedUps = 0;
 let lavaCd = 0;
 let emberT = 0;
 
@@ -418,6 +421,13 @@ function syncStats() {
   for (const id of WEAPON_ORDER) {
     weaponAmmo[id] = Math.min(weaponAmmo[id], magSize(WEAPONS[id]));
   }
+  // Golden Gun turns your weapons gold
+  const golden = owned.has('goldengun');
+  gunMat.color.setHex(golden ? 0xd4af37 : 0x2f3138);
+  gunMat.metalness = golden ? 0.85 : 0.4;
+  gunMat.roughness = golden ? 0.25 : 0.5;
+  woodMat.color.setHex(golden ? 0xb8912a : 0x5c4326);
+  woodMat.metalness = golden ? 0.7 : 0;
 }
 
 function updateBuildStrip() {
@@ -546,6 +556,7 @@ function startGame() {
   jetThrustUps = 0;
   armor = 0;
   droneRateUps = 0;
+  collectorSpeedUps = 0;
   player.maxHealth = 100;
   player.reset();
   syncStats();
@@ -691,138 +702,188 @@ function showSlotDialog(upg) {
 
 function renderShop() {
   shopBar.innerHTML = `<span id="shop-scrap">SCRAP ${scrap}</span>`;
-  const items = [
+  const jetOwned = mech.active ? mech.backup?.jetpack.owned : player.jetpack.owned;
+
+  const groups = [
     {
-      label: `REROLL — ${COST_REROLL}`,
-      can: scrap >= COST_REROLL,
-      act: () => { scrap -= COST_REROLL; sounds.reroll(); rollNewOffer(); renderOffer(); },
-    },
-    {
-      label: grenadeCount >= GRENADE_MAX ? 'GRENADE — MAX' : `+1 GRENADE — ${COST_GRENADE}`,
-      can: scrap >= COST_GRENADE && grenadeCount < GRENADE_MAX,
-      act: () => { scrap -= COST_GRENADE; grenadeCount++; sounds.pickup(); renderShop(); },
-    },
-    {
-      label: drones.count() >= DRONE_MAX
-        ? `DRONE — MAX (${drones.count()}/${DRONE_MAX})`
-        : `HELPER DRONE — ${COST_DRONE} (${drones.count()}/${DRONE_MAX})`,
-      can: scrap >= COST_DRONE && drones.count() < DRONE_MAX,
-      act: () => { scrap -= COST_DRONE; drones.add(); sounds.pickup(); addFeedLine('DRONE ONLINE'); renderShop(); },
-    },
-    ...(drones.count() > 0
-      ? [
-          {
-            label: droneRateUps >= DRONE_RATE_MAX
-              ? 'DRONE FIRE RATE — MAX'
-              : `DRONE FIRE RATE +30% — ${COST_DRONE_RATE} (${droneRateUps}/${DRONE_RATE_MAX})`,
-            can: scrap >= COST_DRONE_RATE && droneRateUps < DRONE_RATE_MAX,
-            act: () => {
-              scrap -= COST_DRONE_RATE;
-              droneRateUps++;
-              drones.fireRateMult *= 1.3;
-              sounds.pickup();
-              renderShop();
-            },
+      label: 'SUPPLIES',
+      items: [
+        {
+          label: `REROLL — ${COST_REROLL}`,
+          can: scrap >= COST_REROLL,
+          act: () => { scrap -= COST_REROLL; sounds.reroll(); rollNewOffer(); renderOffer(); },
+        },
+        {
+          label: grenadeCount >= GRENADE_MAX ? 'GRENADE — MAX' : `+1 GRENADE — ${COST_GRENADE}`,
+          can: scrap >= COST_GRENADE && grenadeCount < GRENADE_MAX,
+          act: () => { scrap -= COST_GRENADE; grenadeCount++; sounds.pickup(); renderShop(); },
+        },
+        {
+          label: armor >= ARMOR_MAX
+            ? 'ARMOR — MAX (4/4)'
+            : `+1 ARMOR BAR — ${COST_ARMOR} (${Math.floor(armor / ARMOR_PER_BAR)}/4)`,
+          can: scrap >= COST_ARMOR && armor < ARMOR_MAX,
+          act: () => {
+            scrap -= COST_ARMOR;
+            armor = Math.min(ARMOR_MAX, armor + ARMOR_PER_BAR);
+            sounds.pickup();
+            renderShop();
           },
-          {
-            label: drones.twin ? 'TWIN CANNONS — OWNED' : `DRONE TWIN CANNONS — ${COST_DRONE_TWIN}`,
-            can: scrap >= COST_DRONE_TWIN && !drones.twin,
-            act: () => {
-              scrap -= COST_DRONE_TWIN;
-              drones.twin = true;
-              sounds.pickup();
-              addFeedLine('DRONES: TWIN CANNONS');
-              renderShop();
-            },
-          },
-          {
-            label: drones.repair ? 'REPAIR MODULE — OWNED' : `DRONE REPAIR MODULE — ${COST_DRONE_REPAIR}`,
-            can: scrap >= COST_DRONE_REPAIR && !drones.repair,
-            act: () => {
-              scrap -= COST_DRONE_REPAIR;
-              drones.repair = true;
-              sounds.pickup();
-              addFeedLine('DRONES: REPAIR MODULE (2.5 HP/S EACH)');
-              renderShop();
-            },
-          },
-        ]
-      : []),
-    {
-      label: armor >= ARMOR_MAX
-        ? 'ARMOR — MAX (4/4)'
-        : `+1 ARMOR BAR — ${COST_ARMOR} (${Math.floor(armor / ARMOR_PER_BAR)}/4)`,
-      can: scrap >= COST_ARMOR && armor < ARMOR_MAX,
-      act: () => {
-        scrap -= COST_ARMOR;
-        armor = Math.min(ARMOR_MAX, armor + ARMOR_PER_BAR);
-        sounds.pickup();
-        renderShop();
-      },
+        },
+      ],
     },
     {
-      label: mech.active ? 'MECH — ACTIVE' : `MECH — ${MECH.cost}`,
-      can: scrap >= MECH.cost && !mech.active,
-      act: () => {
-        scrap -= MECH.cost;
-        mech.enter();
-        renderShop();
-      },
+      label: 'COMBAT DRONES',
+      items: [
+        {
+          label: drones.count() >= DRONE_MAX
+            ? `DRONE — MAX (${drones.count()}/${DRONE_MAX})`
+            : `HELPER DRONE — ${COST_DRONE} (${drones.count()}/${DRONE_MAX})`,
+          can: scrap >= COST_DRONE && drones.count() < DRONE_MAX,
+          act: () => { scrap -= COST_DRONE; drones.add(); sounds.pickup(); addFeedLine('DRONE ONLINE'); renderShop(); },
+        },
+        ...(drones.count() > 0
+          ? [
+              {
+                label: droneRateUps >= DRONE_RATE_MAX
+                  ? 'FIRE RATE — MAX'
+                  : `FIRE RATE +10% — ${COST_DRONE_RATE} (${droneRateUps}/${DRONE_RATE_MAX})`,
+                can: scrap >= COST_DRONE_RATE && droneRateUps < DRONE_RATE_MAX,
+                act: () => {
+                  scrap -= COST_DRONE_RATE;
+                  droneRateUps++;
+                  drones.fireRateMult *= 1.1;
+                  sounds.pickup();
+                  renderShop();
+                },
+              },
+              {
+                label: drones.twin ? 'TWIN CANNONS — OWNED' : `TWIN CANNONS — ${COST_DRONE_TWIN}`,
+                can: scrap >= COST_DRONE_TWIN && !drones.twin,
+                act: () => {
+                  scrap -= COST_DRONE_TWIN;
+                  drones.twin = true;
+                  sounds.pickup();
+                  addFeedLine('DRONES: TWIN CANNONS');
+                  renderShop();
+                },
+              },
+            ]
+          : []),
+      ],
+    },
+    {
+      label: 'COLLECTOR',
+      items: [
+        {
+          label: drones.collector ? 'COLLECTOR — OWNED' : `SCRAP COLLECTOR — ${COST_COLLECTOR}`,
+          can: scrap >= COST_COLLECTOR && !drones.collector,
+          act: () => {
+            scrap -= COST_COLLECTOR;
+            drones.addCollector();
+            sounds.pickup();
+            addFeedLine('COLLECTOR ONLINE — GATHERS SCRAP FOR YOU');
+            renderShop();
+          },
+        },
+        ...(drones.collector
+          ? [
+              {
+                label: collectorSpeedUps >= COLLECTOR_SPEED_MAX
+                  ? 'COLLECTOR SPEED — MAX'
+                  : `COLLECTOR SPEED +40% — ${COST_COLLECTOR_SPEED} (${collectorSpeedUps}/${COLLECTOR_SPEED_MAX})`,
+                can: scrap >= COST_COLLECTOR_SPEED && collectorSpeedUps < COLLECTOR_SPEED_MAX,
+                act: () => {
+                  scrap -= COST_COLLECTOR_SPEED;
+                  collectorSpeedUps++;
+                  drones.collectorSpeed *= 1.4;
+                  sounds.pickup();
+                  renderShop();
+                },
+              },
+            ]
+          : []),
+      ],
+    },
+    {
+      label: 'HEAVY GEAR',
+      items: [
+        ...(!jetOwned
+          ? [
+              {
+                label: `JETPACK — ${COST_JETPACK}`,
+                can: scrap >= COST_JETPACK && !mech.active,
+                act: () => {
+                  scrap -= COST_JETPACK;
+                  player.jetpack.owned = true;
+                  player.jetpack.fuel = player.jetpack.maxFuel;
+                  sounds.overclockUp();
+                  addFeedLine('JETPACK EQUIPPED — HOLD SPACE IN AIR');
+                  renderShop();
+                },
+              },
+            ]
+          : [
+              {
+                label: jetFuelUps >= JET_UP_MAX
+                  ? 'JET FUEL — MAX'
+                  : `JET FUEL +50% — ${COST_JET_UP} (${jetFuelUps}/${JET_UP_MAX})`,
+                can: scrap >= COST_JET_UP && jetFuelUps < JET_UP_MAX && !mech.active,
+                act: () => {
+                  scrap -= COST_JET_UP;
+                  jetFuelUps++;
+                  player.jetpack.maxFuel += 0.65;
+                  sounds.pickup();
+                  renderShop();
+                },
+              },
+              {
+                label: jetThrustUps >= JET_UP_MAX
+                  ? 'JET THRUST — MAX'
+                  : `JET THRUST +20% — ${COST_JET_UP} (${jetThrustUps}/${JET_UP_MAX})`,
+                can: scrap >= COST_JET_UP && jetThrustUps < JET_UP_MAX && !mech.active,
+                act: () => {
+                  scrap -= COST_JET_UP;
+                  jetThrustUps++;
+                  player.jetpack.thrust += 7.5;
+                  sounds.pickup();
+                  renderShop();
+                },
+              },
+            ]),
+        {
+          label: mech.active ? 'MECH — ACTIVE' : `MECH — ${MECH.cost}`,
+          can: scrap >= MECH.cost && !mech.active,
+          act: () => {
+            scrap -= MECH.cost;
+            mech.enter();
+            renderShop();
+          },
+        },
+      ],
     },
   ];
-  const jetOwned = mech.active ? mech.backup?.jetpack.owned : player.jetpack.owned;
-  if (!jetOwned) {
-    items.push({
-      label: `JETPACK — ${COST_JETPACK}`,
-      can: scrap >= COST_JETPACK && !mech.active,
-      act: () => {
-        scrap -= COST_JETPACK;
-        player.jetpack.owned = true;
-        player.jetpack.fuel = player.jetpack.maxFuel;
-        sounds.overclockUp();
-        addFeedLine('JETPACK EQUIPPED — HOLD SPACE IN AIR');
-        renderShop();
-      },
-    });
-  } else {
-    // while piloting, player.jetpack is the mech's — don't let upgrades touch it
-    items.push({
-      label: jetFuelUps >= JET_UP_MAX
-        ? 'JET FUEL — MAX'
-        : `JET FUEL +50% — ${COST_JET_UP} (${jetFuelUps}/${JET_UP_MAX})`,
-      can: scrap >= COST_JET_UP && jetFuelUps < JET_UP_MAX && !mech.active,
-      act: () => {
-        scrap -= COST_JET_UP;
-        jetFuelUps++;
-        player.jetpack.maxFuel += 0.65;
-        sounds.pickup();
-        renderShop();
-      },
-    });
-    items.push({
-      label: jetThrustUps >= JET_UP_MAX
-        ? 'JET THRUST — MAX'
-        : `JET THRUST +20% — ${COST_JET_UP} (${jetThrustUps}/${JET_UP_MAX})`,
-      can: scrap >= COST_JET_UP && jetThrustUps < JET_UP_MAX && !mech.active,
-      act: () => {
-        scrap -= COST_JET_UP;
-        jetThrustUps++;
-        player.jetpack.thrust += 7.5;
-        sounds.pickup();
-        renderShop();
-      },
-    });
-  }
-  for (const item of items) {
-    const btn = document.createElement('button');
-    btn.className = 'shop-btn' + (item.can ? '' : ' disabled');
-    btn.textContent = item.label;
-    if (item.can) {
-      btn.onclick = () => {
-        if (!offerLocked()) item.act();
-      };
+
+  for (const group of groups) {
+    if (!group.items.length) continue;
+    const row = document.createElement('div');
+    row.className = 'shop-group';
+    const lab = document.createElement('span');
+    lab.className = 'shop-group-label';
+    lab.textContent = group.label;
+    row.appendChild(lab);
+    for (const item of group.items) {
+      const btn = document.createElement('button');
+      btn.className = 'shop-btn' + (item.can ? '' : ' disabled');
+      btn.textContent = item.label;
+      if (item.can) {
+        btn.onclick = () => {
+          if (!offerLocked()) item.act();
+        };
+      }
+      row.appendChild(btn);
     }
-    shopBar.appendChild(btn);
+    shopBar.appendChild(row);
   }
 }
 
@@ -1323,7 +1384,8 @@ bots.onPlayerHit = (dmg, kind, sourceBot) => {
     return;
   }
   if (kind === 'melee' && stats.thorns && sourceBot) {
-    dealDamage(sourceBot, stats.thorns, 'body', { source: 'other', depth: 1 });
+    const tdmg = Math.max(50, Math.round(sourceBot.maxHealth * 0.25)) * stats.thorns;
+    dealDamage(sourceBot, tdmg, 'body', { source: 'other', depth: 1 });
   }
   let final = Math.max(1, Math.round(dmg * (1 - stats.damageReduction)));
   // armor soaks damage first and stays broken until rebought
@@ -1576,6 +1638,8 @@ renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05);
 
   if (state === 'playing') {
+    const frozen = waveState === 'upgrade';
+    if (!frozen) {
     adrenTimer = Math.max(0, adrenTimer - dt);
     surgeTimer = Math.max(0, surgeTimer - dt);
     invulnTimer = Math.max(0, invulnTimer - dt);
@@ -1607,8 +1671,9 @@ renderer.setAnimationLoop(() => {
       }
     }
 
-    // Time Dilation and FRENZY both scale enemy speed
-    bots.speedScale = stats.enemySlow * (mutator === 'frenzy' ? 1.3 : 1);
+    // FRENZY scales everyone; Time Dilation slows only non-bosses
+    bots.speedScale = mutator === 'frenzy' ? 1.3 : 1;
+    bots.slowMult = stats.enemySlow;
 
     // magnet bosses drag you toward them — fight it or fly
     if (bots.playerPull) {
@@ -1680,6 +1745,12 @@ renderer.setAnimationLoop(() => {
     );
 
     drones.update(dt, player, bots.bots, dealDamage);
+    drones.updateCollector(dt, player, grenades.pickups, (p) => {
+      scrap += p.value;
+      run.scrapEarned += p.value;
+      sounds.scrap();
+      grenades.removePickup(p);
+    });
 
     fireCooldown -= dt;
     comboTimer = Math.max(0, comboTimer - dt);
@@ -1712,6 +1783,7 @@ renderer.setAnimationLoop(() => {
         heartbeatTimer = 0.95;
         sounds.heartbeat();
       }
+    }
     }
   }
 
