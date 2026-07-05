@@ -337,6 +337,7 @@ let scrap = 0;
 let kills = 0;
 let comboMult = 1;
 let comboTimer = 0;
+let comboChain = 0; // actual kills in the current chain (uncapped)
 let reloading = false;
 let reloadTimer = 0;
 let fireCooldown = 0;
@@ -389,7 +390,7 @@ function freshRunStats() {
   return {
     shotsFired: 0, shotsHit: 0, damageDealt: 0,
     killsBy: { rifle: 0, marksman: 0, grenade: 0, drone: 0, mech: 0, other: 0 },
-    headshotKills: 0, grenadesThrown: 0, scrapEarned: 0, maxCombo: 1,
+    headshotKills: 0, grenadesThrown: 0, scrapEarned: 0, maxCombo: 1, bestChain: 0,
   };
 }
 run = freshRunStats();
@@ -582,6 +583,7 @@ function startGame() {
   kills = 0;
   comboMult = 1;
   comboTimer = 0;
+  comboChain = 0;
   reloading = false;
   fireCooldown = 0;
   firing = false;
@@ -952,7 +954,7 @@ function runStatsHtml() {
     <div class="stat-row"><span>DAMAGE DEALT</span><span>${Math.round(run.damageDealt).toLocaleString()}</span></div>
     <div class="stat-row"><span>KILLS</span><span>rifle ${kb.rifle} · marksman ${kb.marksman} · grenade ${kb.grenade} · drone ${kb.drone}${kb.mech ? ` · mech ${kb.mech}` : ''}${kb.other ? ` · other ${kb.other}` : ''}</span></div>
     <div class="stat-row"><span>HEADSHOT KILLS</span><span>${run.headshotKills}</span></div>
-    <div class="stat-row"><span>BEST COMBO</span><span>×${run.maxCombo}</span></div>
+    <div class="stat-row"><span>BEST KILL CHAIN</span><span>${run.bestChain} kills (×${run.maxCombo} max mult)</span></div>
     <div class="stat-row"><span>SCRAP EARNED</span><span>${run.scrapEarned}</span></div>
     <div class="stat-row"><span>GRENADES THROWN</span><span>${run.grenadesThrown}</span></div>`;
 }
@@ -1101,9 +1103,11 @@ function addKill(bot, part) {
     pts *= 2;
     tags.push('AIRBORNE');
   }
+  comboChain = comboTimer > 0 ? comboChain + 1 : 1;
   comboMult = comboTimer > 0 ? Math.min(stats.comboMax, comboMult + 1) : 1;
   comboTimer = 4;
   run.maxCombo = Math.max(run.maxCombo, comboMult);
+  run.bestChain = Math.max(run.bestChain, comboChain);
   const total = Math.round((pts * comboMult) / 10) * 10;
   score += total;
   showPopup(`+${total}${tags.length ? ' ' + tags.join(' ') : ''}${comboMult > 1 ? ` ×${comboMult}` : ''}`);
