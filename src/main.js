@@ -4,7 +4,7 @@ import { Player } from './player.js';
 import { BotManager, BOT_TYPES } from './bots.js';
 import { Effects } from './effects.js';
 import { Sounds } from './sounds.js';
-import { UPGRADES, TIERS, createStats, rollOffer } from './upgrades.js';
+import { UPGRADES, TIERS, createStats, rollOffer, tierWeights } from './upgrades.js';
 import { WEAPONS, WEAPON_ORDER } from './weapons.js';
 import { GrenadeManager } from './grenades.js';
 import { DroneManager, DRONE_MAX } from './drone.js';
@@ -1046,6 +1046,7 @@ document.addEventListener('mouseup', (e) => {
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 
 document.addEventListener('keydown', (e) => {
+  if (e.code === 'Escape') el('codex').classList.add('hidden');
   player.keys[e.code] = true;
   if (e.code === 'Space') {
     e.preventDefault();
@@ -1835,6 +1836,57 @@ function initMapCards() {
     }
   }
 }
+// --- upgrade codex: generated from the registries, always current ---
+const codexEl = el('codex');
+const codexBody = el('codex-body');
+function tierPct(wave, tier) {
+  const w = tierWeights(wave);
+  const total = Object.values(w).reduce((a, b) => a + b, 0);
+  return `${((w[tier] / total) * 100).toFixed(0)}%`;
+}
+function buildCodex() {
+  codexBody.innerHTML = '';
+  for (const tier of ['common', 'uncommon', 'rare', 'legendary']) {
+    const entries = UPGRADES.filter((u) => u.tier === tier).sort(
+      (a, b) => (a.ability ? 1 : 0) - (b.ability ? 1 : 0)
+    );
+    if (!entries.length) continue;
+    const head = document.createElement('div');
+    head.className = 'codex-tier-head';
+    head.style.color = TIERS[tier].color;
+    head.innerHTML =
+      `${TIERS[tier].label} (${entries.length})` +
+      `<span class="codex-odds">card odds ${tierPct(1, tier)} at wave 1 → ${tierPct(19, tier)} at wave 19</span>`;
+    codexBody.appendChild(head);
+    const grid = document.createElement('div');
+    grid.className = 'codex-grid';
+    for (const u of entries) {
+      const item = document.createElement('div');
+      item.className = 'codex-item';
+      item.style.borderLeftColor = TIERS[tier].color;
+      const tags = [];
+      if (u.ability) tags.push(`ABILITY · Q/E · ${ABILITIES[u.ability].cd}s CD`);
+      else if (u.unique) tags.push('UNIQUE');
+      else tags.push('STACKS');
+      item.innerHTML =
+        `<b>${u.name}</b><span>${u.desc}</span>` +
+        `<div class="codex-tags">${tags.map((t) => `<span class="codex-tag">${t}</span>`).join('')}</div>`;
+      grid.appendChild(item);
+    }
+    codexBody.appendChild(grid);
+  }
+}
+el('codex-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  buildCodex();
+  codexEl.classList.remove('hidden');
+});
+el('codex-close').addEventListener('click', () => codexEl.classList.add('hidden'));
+codexEl.addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (e.target === codexEl) codexEl.classList.add('hidden');
+});
+
 // difficulty toggle (applies at the next run — no reload needed)
 const diffSelect = el('diff-select');
 function initDiffButtons() {
