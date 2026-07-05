@@ -441,6 +441,86 @@ export function createWorld(scene, mapId = 'arena') {
     addCatwalk(-21.5, -24, 23, -24); // NW roof east edge -> NE platform west edge
     addCatwalk(26, -21, 26, 21);     // NE platform south edge -> SE roof north edge
 
+    // --- SKY TIERS: a grapple playground stacked over the crucible ---
+    // floating walkway (no support columns — it's suspended scenery)
+    function skyWalk(x1, z1, x2, z2, topY) {
+      const horizontal = z1 === z2;
+      const len = horizontal ? Math.abs(x2 - x1) : Math.abs(z2 - z1);
+      const cx = (x1 + x2) / 2;
+      const cz = (z1 + z2) / 2;
+      if (horizontal) {
+        addBox(cx, topY - 0.18, cz, len, 0.35, 2.2, steelMat);
+        addBox(cx, topY + 0.45, cz - 1.25, len, 0.9, 0.15, railMat);
+        addBox(cx, topY + 0.45, cz + 1.25, len, 0.9, 0.15, railMat);
+      } else {
+        addBox(cx, topY - 0.18, cz, 2.2, 0.35, len, steelMat);
+        addBox(cx - 1.25, topY + 0.45, cz, 0.15, 0.9, len, railMat);
+        addBox(cx + 1.25, topY + 0.45, cz, 0.15, 0.9, len, railMat);
+      }
+    }
+    function skyPlatform(px, pz, size, topY) {
+      addBox(px, topY - 0.18, pz, size, 0.35, size, steelMat);
+    }
+
+    const H_MID = 11;
+    const H_HIGH = 22;
+    // mid ring: square loop around the pool
+    for (const [cx, cz] of [[-14, -14], [14, -14], [-14, 14], [14, 14]]) {
+      skyPlatform(cx, cz, 5, H_MID);
+    }
+    skyWalk(-11.5, -14, 11.5, -14, H_MID);
+    skyWalk(-11.5, 14, 11.5, 14, H_MID);
+    skyWalk(-14, -11.5, -14, 11.5, H_MID);
+    skyWalk(14, -11.5, 14, 11.5, H_MID);
+    // high ring: smaller, twice as high — the crown
+    for (const [cx, cz] of [[-10, -10], [10, -10], [-10, 10], [10, 10]]) {
+      skyPlatform(cx, cz, 4, H_HIGH);
+    }
+    skyWalk(-8, -10, 8, -10, H_HIGH);
+    skyWalk(-8, 10, 8, 10, H_HIGH);
+    skyWalk(-10, -8, -10, 8, H_HIGH);
+    skyWalk(10, -8, 10, 8, H_HIGH);
+
+    // floating stair flights: NE overlook (4.5) -> landing (8.5) -> mid ring corner (11)
+    for (let i = 0; i < 8; i++) {
+      const top = 5 + i * 0.5;
+      addBox(22.5 - i * 0.9, top - 0.2, -24, 0.9, 0.4, 2, stepMat);
+    }
+    skyPlatform(14.8, -24, 3, 8.7);
+    for (let i = 0; i < 4; i++) {
+      const top = 9.2 + i * 0.5;
+      addBox(14.4, top - 0.2, -21.2 + i * 1.3, 1.6, 0.4, 1.3, stepMat);
+    }
+
+    // --- LAVA FALL: a suspended vat pouring into the crucible ---
+    // pylons rise straight out of the lava
+    addBox(-4.2, 11.5, -4, 1.2, 23, 1.2, darkMat);
+    addBox(4.2, 11.5, -4, 1.2, 23, 1.2, darkMat);
+    addBox(0, 24.5, -4, 6, 3, 6, darkMat); // the vat
+    // molten surface on top of the vat
+    {
+      const vatTop = new THREE.Mesh(new THREE.PlaneGeometry(5, 5), moltenMat);
+      vatTop.rotation.x = -Math.PI / 2;
+      vatTop.position.set(0, 26.05, -4);
+      scene.add(vatTop);
+      // the fall itself: pure visual, no collision
+      const fall = new THREE.Mesh(
+        new THREE.BoxGeometry(1.6, 23, 1.1),
+        new THREE.MeshBasicMaterial({ color: 0xff6a1a, transparent: true, opacity: 0.92 })
+      );
+      fall.position.set(0, 11.5, -4);
+      scene.add(fall);
+      const splash = new THREE.Mesh(new THREE.CircleGeometry(2.2, 20), moltenMat);
+      splash.rotation.x = -Math.PI / 2;
+      splash.position.set(0, 0.06, -4);
+      scene.add(splash);
+      for (const ly of [6, 14, 21]) {
+        const lamp = new THREE.PointLight(0xff5a1a, 6, 15);
+        lamp.position.set(0, ly, -4);
+        scene.add(lamp);
+      }
+    }
+
     // --- SW storage yard: crate maze ---
     for (const [x, z, h] of [
       [-24, 18, 2], [-28, 24, 1.8], [-20, 26, 1.6], [-30, 14, 1.6],

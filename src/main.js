@@ -699,6 +699,7 @@ function showSlotDialog(upg) {
     btn.className = 'slot-btn';
     btn.innerHTML = `<b>${s}</b><span>${slotLabel(s)}</span>`;
     btn.onclick = () => {
+      discover(upg.id);
       abilities.assign(s, upg.ability);
       owned.set(upg.id, 1);
       updateBuildStrip();
@@ -921,6 +922,7 @@ function showUpgradeOffer(bossReward) {
 }
 
 function pickUpgrade(upg) {
+  discover(upg.id);
   upg.apply(stats);
   owned.set(upg.id, (owned.get(upg.id) || 0) + 1);
   syncStats();
@@ -946,6 +948,30 @@ function onWaveCleared() {
   showUpgradeOffer(BOSS_WAVES.includes(waveNum));
 }
 
+function buildNumbers() {
+  const pct = (v) => `${v >= 1 ? '+' : ''}${Math.round((v - 1) * 100)}%`;
+  const out = [
+    `damage ${pct(stats.damageMult)}`,
+    `fire rate ${pct(stats.fireRateMult)}`,
+    `speed ${pct(stats.speedMult)}`,
+    `${player.maxHealth} max HP`,
+  ];
+  if (stats.reloadMult !== 1) out.push(`reload ${pct(stats.reloadMult)}`);
+  if (stats.magBonus) out.push(`mag +${stats.magBonus}`);
+  if (stats.headshotMult !== 1) out.push(`headshots ${pct(stats.headshotMult)}`);
+  if (stats.damageReduction) out.push(`${Math.round(stats.damageReduction * 100)}% damage resist`);
+  if (stats.longshotMult !== 1) out.push(`longshot ${pct(stats.longshotMult)}`);
+  if (stats.executionerMult !== 1) out.push(`executioner ${pct(stats.executionerMult)}`);
+  if (stats.bossSlayer !== 1) out.push(`boss damage ${pct(stats.bossSlayer)}`);
+  if (stats.highGround !== 1) out.push(`high ground ${pct(stats.highGround)}`);
+  if (stats.killHeal) out.push(`+${stats.killHeal} HP/kill`);
+  if (stats.killAmmo) out.push(`+${stats.killAmmo} ammo/kill`);
+  if (stats.regenRate !== 8) out.push(`regen ${pct(stats.regenRate / 8)}`);
+  if (stats.comboMax !== 5) out.push(`combo cap x${stats.comboMax}`);
+  if (stats.grenadeDmgMult !== 1) out.push(`grenades ${pct(stats.grenadeDmgMult)}`);
+  return out.join(' · ');
+}
+
 function runStatsHtml() {
   const acc = run.shotsFired ? Math.round((run.shotsHit / run.shotsFired) * 100) : 0;
   const kb = run.killsBy;
@@ -956,7 +982,8 @@ function runStatsHtml() {
     <div class="stat-row"><span>HEADSHOT KILLS</span><span>${run.headshotKills}</span></div>
     <div class="stat-row"><span>BEST KILL CHAIN</span><span>${run.bestChain} kills (×${run.maxCombo} max mult)</span></div>
     <div class="stat-row"><span>SCRAP EARNED</span><span>${run.scrapEarned}</span></div>
-    <div class="stat-row"><span>GRENADES THROWN</span><span>${run.grenadesThrown}</span></div>`;
+    <div class="stat-row"><span>GRENADES THROWN</span><span>${run.grenadesThrown}</span></div>
+    <div class="stat-row stat-build"><span>FINAL BUILD</span><span>${buildNumbers()}</span></div>`;
 }
 
 function endGame(won) {
@@ -1840,6 +1867,22 @@ function initMapCards() {
     }
   }
 }
+// --- codex discovery: entries stay ??? until you've picked them in a run ---
+let discovered = (() => {
+  try {
+    return new Set(JSON.parse(localStorage.getItem('minifps-codex') || '[]'));
+  } catch {
+    return new Set();
+  }
+})();
+function discover(id) {
+  if (discovered.has(id)) return;
+  discovered.add(id);
+  try {
+    localStorage.setItem('minifps-codex', JSON.stringify([...discovered]));
+  } catch {}
+}
+
 // --- upgrade codex: generated from the registries, always current ---
 const codexEl = el('codex');
 const codexBody = el('codex-body');
@@ -1855,11 +1898,12 @@ function buildCodex() {
       (a, b) => (a.ability ? 1 : 0) - (b.ability ? 1 : 0)
     );
     if (!entries.length) continue;
+    const found = entries.filter((u) => discovered.has(u.id)).length;
     const head = document.createElement('div');
     head.className = 'codex-tier-head';
     head.style.color = TIERS[tier].color;
     head.innerHTML =
-      `${TIERS[tier].label} (${entries.length})` +
+      `${TIERS[tier].label} (${found}/${entries.length} discovered)` +
       `<span class="codex-odds">card odds ${tierPct(1, tier)} at wave 1 → ${tierPct(19, tier)} at wave 19</span>`;
     codexBody.appendChild(head);
     const grid = document.createElement('div');
@@ -1868,6 +1912,12 @@ function buildCodex() {
       const item = document.createElement('div');
       item.className = 'codex-item';
       item.style.borderLeftColor = TIERS[tier].color;
+      if (!discovered.has(u.id)) {
+        item.classList.add('codex-locked');
+        item.innerHTML = `<b>???</b><span>Pick this card in a run to reveal it.</span>`;
+        grid.appendChild(item);
+        continue;
+      }
       const tags = [];
       if (u.ability) tags.push(`ABILITY · Q/E · ${ABILITIES[u.ability].cd}s CD`);
       else if (u.unique) tags.push('UNIQUE');
