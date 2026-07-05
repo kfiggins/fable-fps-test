@@ -69,7 +69,7 @@ export function createWorld(scene, mapId = 'arena') {
   const sun = new THREE.DirectionalLight(isFoundry ? 0xc8d0e0 : 0xfff2d8, isFoundry ? 0.9 : 1.6);
   sun.position.set(35, 55, 20);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.set(isFoundry ? 1024 : 2048, isFoundry ? 1024 : 2048);
   sun.shadow.camera.left = -60;
   sun.shadow.camera.right = 60;
   sun.shadow.camera.top = 60;
@@ -96,10 +96,10 @@ export function createWorld(scene, mapId = 'arena') {
   grid.material.transparent = true;
   scene.add(grid);
 
-  function addBox(x, y, z, w, h, d, mat, { cover = false } = {}) {
+  function addBox(x, y, z, w, h, d, mat, { cover = false, shadow = true } = {}) {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
     mesh.position.set(x, y, z);
-    mesh.castShadow = true;
+    mesh.castShadow = shadow;
     mesh.receiveShadow = true;
     scene.add(mesh);
     solids.push(mesh);
@@ -309,6 +309,13 @@ export function createWorld(scene, mapId = 'arena') {
     const crateMat = new THREE.MeshStandardMaterial({ color: 0x5c5346, roughness: 0.85 });
     const moltenMat = new THREE.MeshBasicMaterial({ color: 0xff6a1a });
 
+    // rails are decoration: they never block movement (bots chase you anywhere)
+    function addRail(x, y, z, w, h, d) {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), railMat);
+      mesh.position.set(x, y, z);
+      scene.add(mesh);
+    }
+
     function addLava(minX, maxX, minZ, maxZ, lightCount) {
       hazards.push({ minX, maxX, minZ, maxZ });
       const mesh = new THREE.Mesh(new THREE.PlaneGeometry(maxX - minX, maxZ - minZ), moltenMat);
@@ -329,17 +336,11 @@ export function createWorld(scene, mapId = 'arena') {
 
     // --- THE CRUCIBLE: central lava pool with a raised island ---
     addLava(-9, 9, -9, 9, 3);
-    // extra glow at the pool corners
-    for (const [lx, lz] of [[-7, 7], [7, -7]]) {
-      const lamp = new THREE.PointLight(0xff5a1a, 5, 16);
-      lamp.position.set(lx, 1.2, lz);
-      scene.add(lamp);
-    }
     // island platform (sniper nest surrounded by lava)
     addBox(0, 1.2, 0, 6, 2.4, 6, steelMat, { cover: true });
-    // low parapets on the island's north/south edges
-    addBox(0, 2.7, -2.85, 6, 0.6, 0.3, railMat);
-    addBox(0, 2.7, 2.85, 6, 0.6, 0.3, railMat);
+    // low parapets on the island's north/south edges (visual only)
+    addRail(0, 2.7, -2.85, 6, 0.6, 0.3);
+    addRail(0, 2.7, 2.85, 6, 0.6, 0.3);
     // stepped bridges east + west across the pool
     for (const s of [1, -1]) {
       addBox(s * 7.75, 0.2, 0, 3.5, 0.4, 2.8, steelMat); // bridge deck
@@ -369,8 +370,8 @@ export function createWorld(scene, mapId = 'arena') {
         addBox(ex, (H + 2.6) / 2, cz, T, H - 2.6, 2.4, darkMat);
       }
       addBox(cx, H - 0.2, cz, W, 0.4, D, steelMat);
-      addBox(cx, H + 0.35, cz - D / 2 + 0.15, W, 0.7, 0.3, railMat);
-      addBox(cx, H + 0.35, cz + D / 2 - 0.15, W, 0.7, 0.3, railMat);
+      addRail(cx, H + 0.35, cz - D / 2 + 0.15, W, 0.7, 0.3);
+      addRail(cx, H + 0.35, cz + D / 2 - 0.15, W, 0.7, 0.3);
       for (let i = 0; i < 9; i++) {
         const top = 4.5 - i * 0.5;
         addBox(cx + stairsDirX * (W / 2 + 0.45 + i * 0.85), top / 2, cz, 0.85, top, 2.2, stepMat);
@@ -396,8 +397,8 @@ export function createWorld(scene, mapId = 'arena') {
       for (const [ox, oz] of [[-2.5, -2.5], [2.5, -2.5], [-2.5, 2.5], [2.5, 2.5]]) {
         addBox(px + ox, (top - 0.4) / 2, pz + oz, 0.6, top - 0.4, 0.6, darkMat);
       }
-      addBox(px - 2.85, top + 0.35, pz, 0.3, 0.7, 6, railMat);
-      addBox(px + 2.85, top + 0.35, pz, 0.3, 0.7, 6, railMat);
+      addRail(px - 2.85, top + 0.35, pz, 0.3, 0.7, 6);
+      addRail(px + 2.85, top + 0.35, pz, 0.3, 0.7, 6);
       for (let i = 0; i < 9; i++) {
         const stop = 4.5 - i * 0.5;
         addBox(px, stop / 2, pz - (3 + 0.45 + i * 0.85), 2.2, stop, 0.85, stepMat);
@@ -420,13 +421,13 @@ export function createWorld(scene, mapId = 'arena') {
       const cx = (x1 + x2) / 2;
       const cz = (z1 + z2) / 2;
       if (horizontal) {
-        addBox(cx, 4.32, cz, len, 0.35, 2.2, steelMat);
-        addBox(cx, 4.95, cz - 1.25, len, 0.9, 0.15, railMat);
-        addBox(cx, 4.95, cz + 1.25, len, 0.9, 0.15, railMat);
+        addBox(cx, 4.32, cz, len, 0.35, 2.2, steelMat, { shadow: false });
+        addRail(cx, 4.95, cz - 1.25, len, 0.9, 0.15);
+        addRail(cx, 4.95, cz + 1.25, len, 0.9, 0.15);
       } else {
-        addBox(cx, 4.32, cz, 2.2, 0.35, len, steelMat);
-        addBox(cx - 1.25, 4.95, cz, 0.15, 0.9, len, railMat);
-        addBox(cx + 1.25, 4.95, cz, 0.15, 0.9, len, railMat);
+        addBox(cx, 4.32, cz, 2.2, 0.35, len, steelMat, { shadow: false });
+        addRail(cx - 1.25, 4.95, cz, 0.15, 0.9, len);
+        addRail(cx + 1.25, 4.95, cz, 0.15, 0.9, len);
       }
       // support columns (skip any that would stand in lava)
       const n = Math.max(1, Math.round(len / 8));
@@ -449,17 +450,17 @@ export function createWorld(scene, mapId = 'arena') {
       const cx = (x1 + x2) / 2;
       const cz = (z1 + z2) / 2;
       if (horizontal) {
-        addBox(cx, topY - 0.18, cz, len, 0.35, 2.2, steelMat);
-        addBox(cx, topY + 0.45, cz - 1.25, len, 0.9, 0.15, railMat);
-        addBox(cx, topY + 0.45, cz + 1.25, len, 0.9, 0.15, railMat);
+        addBox(cx, topY - 0.18, cz, len, 0.35, 2.2, steelMat, { shadow: false });
+        addRail(cx, topY + 0.45, cz - 1.25, len, 0.9, 0.15);
+        addRail(cx, topY + 0.45, cz + 1.25, len, 0.9, 0.15);
       } else {
-        addBox(cx, topY - 0.18, cz, 2.2, 0.35, len, steelMat);
-        addBox(cx - 1.25, topY + 0.45, cz, 0.15, 0.9, len, railMat);
-        addBox(cx + 1.25, topY + 0.45, cz, 0.15, 0.9, len, railMat);
+        addBox(cx, topY - 0.18, cz, 2.2, 0.35, len, steelMat, { shadow: false });
+        addRail(cx - 1.25, topY + 0.45, cz, 0.15, 0.9, len);
+        addRail(cx + 1.25, topY + 0.45, cz, 0.15, 0.9, len);
       }
     }
     function skyPlatform(px, pz, size, topY) {
-      addBox(px, topY - 0.18, pz, size, 0.35, size, steelMat);
+      addBox(px, topY - 0.18, pz, size, 0.35, size, steelMat, { shadow: false });
     }
 
     const H_MID = 11;
@@ -484,13 +485,27 @@ export function createWorld(scene, mapId = 'arena') {
     // floating stair flights: NE overlook (4.5) -> landing (8.5) -> mid ring corner (11)
     for (let i = 0; i < 8; i++) {
       const top = 5 + i * 0.5;
-      addBox(22.5 - i * 0.9, top - 0.2, -24, 0.9, 0.4, 2, stepMat);
+      addBox(22.5 - i * 0.9, top - 0.2, -24, 0.9, 0.4, 2, stepMat, { shadow: false });
     }
     skyPlatform(14.8, -24, 3, 8.7);
     for (let i = 0; i < 4; i++) {
       const top = 9.2 + i * 0.5;
-      addBox(14.4, top - 0.2, -21.2 + i * 1.3, 1.6, 0.4, 1.3, stepMat);
+      addBox(14.4, top - 0.2, -21.2 + i * 1.3, 1.6, 0.4, 1.3, stepMat, { shadow: false });
     }
+
+    // --- mid ring -> high ring switchback (bots can climb all the way) ---
+    // flight A: west along z=14 from the SE mid corner, 11.5 -> 16.5
+    for (let i = 0; i < 11; i++) {
+      const top = 11.5 + i * 0.5;
+      addBox(11.2 - i * 1.35, top - 0.2, 14, 1.35, 0.4, 2, stepMat, { shadow: false });
+    }
+    skyPlatform(-4, 14, 3.2, 16.5); // switchback landing
+    // flight B: north along x=-4, 17 -> 22
+    for (let i = 0; i < 11; i++) {
+      const top = 17 + i * 0.5;
+      addBox(-4, top - 0.2, 12.6 - i * 1.9, 2, 0.4, 1.9, stepMat, { shadow: false });
+    }
+    addBox(-4, 21.8, -8, 2.2, 0.4, 3.4, steelMat, { shadow: false }); // connector onto the high ring
 
     // --- LAVA FALL: a suspended vat pouring into the crucible ---
     // pylons rise straight out of the lava
@@ -514,8 +529,8 @@ export function createWorld(scene, mapId = 'arena') {
       splash.rotation.x = -Math.PI / 2;
       splash.position.set(0, 0.06, -4);
       scene.add(splash);
-      for (const ly of [6, 14, 21]) {
-        const lamp = new THREE.PointLight(0xff5a1a, 6, 15);
+      for (const ly of [8, 19]) {
+        const lamp = new THREE.PointLight(0xff5a1a, 6, 16);
         lamp.position.set(0, ly, -4);
         scene.add(lamp);
       }
@@ -558,6 +573,18 @@ export function createWorld(scene, mapId = 'arena') {
       }
       return Math.abs(x - st.x) < 3.6 && Math.abs(z - st.z) < 3.6 && feet > 3.6;
     };
+    // waypoint chains up the sky tiers (bots follow these to evict campers)
+    const V = (x, y, z) => new THREE.Vector3(x, y, z);
+    const midRingRoute = [
+      V(26, 0, -35.6), V(26, 2.25, -31.3), V(26, 4.5, -25),
+      V(18.7, 7.0, -24), V(14.8, 8.7, -24), V(14.4, 10.1, -18.9), V(14, 11, -14),
+    ];
+    const highRingRoute = [
+      ...midRingRoute,
+      V(14, 11, 13.5), V(5.5, 13.7, 14), V(-4, 16.5, 14),
+      V(-4, 19.3, 3.2), V(-4, 21.9, -8),
+    ];
+
     const onCatwalkArea = (x, z, feet) =>
       feet > 3.6 &&
       ((Math.abs(z + 24) < 1.8 && x > -22 && x < 24) ||
@@ -578,6 +605,14 @@ export function createWorld(scene, mapId = 'arena') {
           if (onStructure(structures[i], botPos.x, botPos.z, botPos.y)) return null;
           return { key: `s${i}`, points: structures[i].route };
         }
+      }
+      if (pFeet > 17) {
+        if (botPos.y > 17) return null;
+        return { key: 'skyH', points: highRingRoute };
+      }
+      if (pFeet > 8.5) {
+        if (botPos.y > 8.5) return null;
+        return { key: 'skyM', points: midRingRoute };
       }
       if (onCatwalkArea(playerPos.x, playerPos.z, pFeet)) {
         if (botPos.y > 3.6) return null;

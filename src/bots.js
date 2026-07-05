@@ -869,7 +869,7 @@ export class BotManager {
     // A waypoint only counts as reached when the bot matches its HEIGHT too —
     // otherwise bots cut corners beside staircases and pin against step sides.
     const atWaypoint = (w, r) =>
-      Math.hypot(pos.x - w.x, pos.z - w.z) < r && Math.abs(pos.y - w.y) < 0.7;
+      Math.hypot(pos.x - w.x, pos.z - w.z) < r && Math.abs(pos.y - w.y) < 0.9;
     const canRoute = ((cfg.ai === 'skirmish' && !cfg.boss) || cfg.ai === 'rush') && !stunned;
     if (canRoute && bot.state !== 'cover') {
       const route = this.routeFor(pos, targetPos);
@@ -906,9 +906,18 @@ export class BotManager {
           else bot.stuckTimer = 0;
           bot.lastRouteX = pos.x;
           bot.lastRouteZ = pos.z;
-          if (bot.stuckTimer > 1.5) {
-            bot.routeProgress = 0;
+          if (bot.stuckTimer > 1.2) {
             bot.stuckTimer = 0;
+            bot.unstick = { s: Math.random() < 0.5 ? 1 : -1, t: 0.9 };
+          }
+          if (bot.unstick) {
+            bot.unstick.t -= dt;
+            if (bot.unstick.t <= 0) bot.unstick = null;
+            else {
+              const mx = moveX;
+              moveX = -moveZ * bot.unstick.s;
+              moveZ = mx * bot.unstick.s;
+            }
           }
         }
       } else {
@@ -937,8 +946,9 @@ export class BotManager {
       } else if (cfg.ai === 'rush') {
         moveX = _toPlayer.x;
         moveZ = _toPlayer.z;
-        moveX += -_toPlayer.z * bot.strafeDir * 0.8;
-        moveZ += _toPlayer.x * bot.strafeDir * 0.8;
+        const rushW = pos.y > 8 ? 0 : 0.8;
+        moveX += -_toPlayer.z * bot.strafeDir * rushW;
+        moveZ += _toPlayer.x * bot.strafeDir * rushW;
         if (dist < 6) speedMult = 1.35;
       } else if (cfg.ai === 'sniper') {
         if (dist < 14) {
