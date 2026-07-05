@@ -153,8 +153,14 @@ const FINAL_WAVE = WAVES.length;
 
 // --- difficulty: NORMAL is the real game; EASY is for the kids ---
 const DIFFS = {
-  normal: { label: 'NORMAL', enemyDmg: 1, enemyHp: 1, enemySpeed: 1, accuracy: 1, bestSuffix: '' },
-  easy: { label: 'EASY', enemyDmg: 0.45, enemyHp: 0.7, enemySpeed: 0.85, accuracy: 0.7, bestSuffix: '-easy' },
+  normal: {
+    label: 'NORMAL', enemyDmg: 1, enemyHp: 1, enemySpeed: 1, accuracy: 1,
+    playerHp: 1, waveScale: 1, countMult: 1, scrapMult: 1, regenRate: 1, regenDelay: 1, bestSuffix: '',
+  },
+  easy: {
+    label: 'EASY', enemyDmg: 0.45, enemyHp: 0.7, enemySpeed: 0.85, accuracy: 0.7,
+    playerHp: 1.5, waveScale: 0.5, countMult: 0.7, scrapMult: 1.6, regenRate: 1.5, regenDelay: 0.6, bestSuffix: '-easy',
+  },
 };
 let diffId = (() => {
   try {
@@ -426,14 +432,14 @@ function switchWeapon(id) {
 }
 
 function syncStats() {
-  const newMax = 100 + stats.maxHealthBonus;
+  const newMax = Math.round((100 + stats.maxHealthBonus) * DIFF().playerHp);
   if (newMax > player.maxHealth) player.health += newMax - player.maxHealth;
   player.maxHealth = newMax;
   player.health = Math.min(player.health, healCap());
   player.jumpMult = stats.jumpMult;
   player.canDoubleJump = stats.doubleJump && !mech.active;
-  player.regenDelay = stats.regenDelay;
-  player.regenRate = stats.regenRate;
+  player.regenDelay = stats.regenDelay * DIFF().regenDelay;
+  player.regenRate = stats.regenRate * DIFF().regenRate;
   for (const id of WEAPON_ORDER) {
     weaponAmmo[id] = Math.min(weaponAmmo[id], magSize(WEAPONS[id]));
   }
@@ -598,6 +604,7 @@ function startGame() {
   bots.eliteFromWave = MAP.eliteFrom;
   bots.hpFactor = DIFF().enemyHp;
   bots.accuracyMult = DIFF().accuracy;
+  bots.waveScale = DIFF().waveScale;
   state = 'playing';
   startWave(1);
 }
@@ -628,6 +635,23 @@ function clearMutator() {
   scene.background.setHex(ENV.bg);
   world.hemi.intensity = ENV.hemi;
   world.sun.intensity = ENV.sun;
+}
+
+// EASY trims wave sizes (bosses always spawn)
+function easySpec(spec) {
+  const mult = DIFF().countMult;
+  if (mult >= 1) return spec;
+  let kept = 0;
+  let seen = 0;
+  return spec.filter((t) => {
+    if (BOT_TYPES[t].boss) return true;
+    seen++;
+    if (kept < Math.ceil(seen * mult)) {
+      kept++;
+      return true;
+    }
+    return false;
+  });
 }
 
 function startWave(n) {
@@ -1214,19 +1238,19 @@ function dealDamage(bot, dmg, part, opts = {}) {
     if (wasBoss) {
       grenades.spawnPickup(pos, 'grenade');
       grenades.spawnPickup(pos, 'grenade');
-      grenades.spawnPickup(pos, 'scrap', SCRAP_BOSS);
+      grenades.spawnPickup(pos, 'scrap', Math.round(SCRAP_BOSS * DIFF().scrapMult));
     } else {
       if (Math.random() < GRENADE_DROP_CHANCE * stats.grenadeDropMult) {
         grenades.spawnPickup(pos, 'grenade');
       }
       if (bot.elite) {
         // elites always pay out, triple
-        grenades.spawnPickup(pos, 'scrap', (SCRAP_VALUES[bot.type] || 10) * 3);
+        grenades.spawnPickup(pos, 'scrap', Math.round((SCRAP_VALUES[bot.type] || 10) * 3 * DIFF().scrapMult));
       } else if (
         Math.random() <
         Math.min(0.95, SCRAP_DROP_CHANCE * stats.scrapDropMult * (mutator === 'frenzy' ? 2 : 1))
       ) {
-        grenades.spawnPickup(pos, 'scrap', SCRAP_VALUES[bot.type] || 10);
+        grenades.spawnPickup(pos, 'scrap', Math.round((SCRAP_VALUES[bot.type] || 10) * DIFF().scrapMult));
       }
     }
     if (stats.chainLightning && depth === 0) {
@@ -1768,7 +1792,7 @@ renderer.setAnimationLoop(() => {
       interTimer -= dt;
       if (interTimer <= 0) {
         waveState = 'active';
-        bots.startWave(WAVES[waveNum - 1], player.position);
+        bots.startWave(easySpec(WAVES[waveNum - 1]), player.position);
       }
     } else if (waveState === 'active') {
       bots.update(dt, player, waveNum);

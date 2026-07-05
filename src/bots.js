@@ -340,16 +340,17 @@ export class BotManager {
     this.eliteFromWave = 16;
     this.hpFactor = 1; // easy mode scales ALL enemy hp (bosses included)
     this.accuracyMult = 1; // easy mode makes everyone aim worse
+    this.waveScale = 1; // easy mode: per-wave scaling grows at half speed
     this.hazards = world.hazards || [];
     this.playerBurnCd = 0;
   }
 
   hpMult() {
-    return (1 + (this.waveNum - 1) * 0.04) * this.mapDiff;
+    return (1 + (this.waveNum - 1) * 0.04 * this.waveScale) * this.mapDiff;
   }
 
   dmgMult() {
-    return (1 + (this.waveNum - 1) * 0.03) * this.mapDiff;
+    return (1 + (this.waveNum - 1) * 0.03 * this.waveScale) * this.mapDiff;
   }
 
   get waveDone() {
@@ -551,7 +552,7 @@ export class BotManager {
       this.spawnBot(this.spawnQueue.shift(), null, player.position);
       this.spawnDelay = 0.35;
     }
-    const accuracy = (1 + waveNum * 0.04) * this.accuracyMult;
+    const accuracy = (1 + waveNum * 0.04 * this.waveScale) * this.accuracyMult;
     for (const bot of this.bots) {
       if (bot.alive) this.updateBot(bot, dt, player, accuracy);
     }
